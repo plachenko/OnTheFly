@@ -1,0 +1,8 @@
+[gd_resource type="Resource" format=3]
+
+[ext_resource type="Script" path="res://food_menu_item.gd" id="1_d31di"]
+
+[resource]
+script = ExtResource("1_d31di")
+food_name = "Drink"
+price = 3

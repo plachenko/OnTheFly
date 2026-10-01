@@ -1,0 +1,310 @@
+STREET KITCHEN - TRUCK PLAYGROUND
+
+Run Street_Kitchen_Windows/Street_Kitchen.exe, or import project.godot into Godot 4.7.2 and press F6/F5.
+
+HILLY CITY SCENE
+Choose Hilly city on the main menu, or open procedural_city.tscn in Godot.
+The scene creates a new hilly, collision-enabled landscape each time it loads,
+then places Kenney roads and commercial buildings on a drivable city plateau.
+The truck, serving pads, patrons, timer, money, and HUD remain playable.
+Select the ProceduralCity node in the editor to adjust terrain size, hill
+height, road tile size, building count, model paths, or turn off randomization
+and set a fixed seed. Roads and buildings are generated scene objects at run
+time; their templates and licenses are in assets/kenney_city. The original
+flat playground remains available through New game.
+To package source changes later, run ../Update_Project_Zip.ps1 in PowerShell.
+It rebuilds the project ZIP without Godot's generated .godot cache.
+
+W / Up: accelerate
+S / Down: brake into reverse
+A D / Left Right: steer
+Space: brake
+E: open or close the serving awning and counter (stop first)
+R: reset the truck
+Right mouse drag: orbit the camera
+Mouse wheel: zoom
+Start / Escape: pause menu (Resume, Options, Quit game)
+
+JOYPAD (MCON / standard XInput gamepad)
+RT: analog acceleration
+LT: analog braking (does not reverse)
+Left stick: steer
+Right stick: orbit camera
+A: open / close kitchen
+B: reverse
+X: handbrake
+Y: reset position / tow disabled truck (preserves damage)
+View / Back or keyboard Tab: controller settings (pauses driving)
+Settings include stick deadzone, trigger deadzone, steering sensitivity,
+and impact vibration. Input bindings are saved in Project Settings > Input Map.
+HUD controller settings defaults are editable in scenes/hud.tscn.
+
+VEHICLE LIGHTS
+H / D-pad Up toggles truck headlights. J / D-pad Left and L / D-pad Right
+toggle directionals; K / D-pad Down toggles hazards. A signal cancels after
+a completed turn when steering returns to center. Brake and reverse lights
+follow the truck's driving state automatically. Kenney traffic cars use the
+same reusable scenes/vehicle_lights.tscn rig, brake while yielding, and signal
+before their occasional intersection turns. A disabled car flashes hazards.
+The VehicleLights node in each vehicle scene exposes sizes, beam settings,
+and blink timing in the Inspector. To enable a police car's red/blue bar from
+game code, call traffic_car.set_police_lights_enabled(true); pass false to
+switch it off. Police flashers start off by default.
+
+TRUCK DAMAGE AND PARKING CAMERA
+Hard impacts with solid obstacles damage the truck; the damage meter fills
+as health is lost. Light contacts and ground contact do not cause damage.
+At 100% damage the truck is disabled. R / Y tows it to the repair pad;
+repairs cost money. Position resets preserve damage.
+Select the truck root to tune max health, impact threshold, and damage scale.
+Low static obstacles can be climbed while driving forward or backward.
+The truck's Climbing Obstacles Inspector section controls maximum climb
+height (0.65 m), climb damage (2), and damage cooldown (0.8 seconds).
+Climbing damage varies slightly with obstacle height and driving speed.
+Taller objects still block the truck and cause normal impact damage;
+physical cones remain pushable. Full collision-shape checks enforce
+headroom, forward clearance, and a walkable landing surface.
+Opening the kitchen while stopped on a marked parking pad moves the camera
+to the serving window. Closing it restores the driving view. Accelerating
+with the kitchen open automatically packs it up, then drives away. Leaving
+the parking zone also restores the driving camera.
+ParkingPads contains four editable Area3D zones. Their camera offset,
+focus offset, and transition speed are adjustable in the Inspector.
+
+An arcade driving scene with a plaza, a garden island, parking bays,
+picnic tables, trees, and solid curbs. Deploying the kitchen parks the
+truck; close the panels before driving away.
+
+The truck is the original Blender model, exported to assets/truck.glb.
+main.tscn contains the saved environment, lights, road markings, scenery,
+cone instances, truck instance, camera, and HUD instance. The vehicle light
+rig creates its lamp visuals at runtime from Inspector settings.
+
+EDITOR WORKFLOW
+Open main.tscn to select, move, duplicate, or attach scripts to objects.
+EnvironmentGeometry, RoadMarkings, Scenery, and Cones organize the level.
+Open scenes/truck.tscn to edit its model and collision shape. Select its
+root to tune driving and suspension settings in the Inspector. Reset
+returns the truck to the starting transform you set in the editor.
+Open scenes/cone.tscn to edit the cone mesh, collision, mass, friction,
+and damping. The cones use RigidBody3D and react to truck impacts.
+Open scenes/hud.tscn to edit the UI. Select the level root to tune the
+follow camera, and use Project Settings > Input Map to change controls.
+For nested prefab children, right-click an instance and enable Editable
+Children, or open that prefab scene directly.
+
+game.gd handles camera movement and HUD updates. truck.gd handles driving,
+wheel motion, suspension, cone impulses, and the food-truck transformation.
+
+RIG AND SUSPENSION
+The rig has 16 bones: Root, Chassis, Awning, Counter, and four sets of
+Suspension, Steer, and Spin bones. Each mesh uses rigid bone weights.
+The Blender source is Food_Truck_Rigged.blend. Frames 1-180 show the
+food-truck conversion; frames 200-390 demonstrate suspension poses.
+
+The Godot controller calculates longitudinal and lateral weight transfer
+from vehicle mass, acceleration, center-of-mass height, wheelbase, and
+track width. Four damped springs drive chassis pitch/roll and individual
+wheel suspension bones. Wheel raycasts maintain tire contact with the
+ground. Acceleration compresses the rear; braking compresses the front;
+turning compresses the outside wheels. The HUD shows axle and side loads.
+
+Tuning in truck.gd: vehicle_mass (2400 kg), center_of_mass_height (1.45 m),
+spring_stiffness (42000 N/m), spring_damping (6500 N*s/m), and
+suspension_travel (0.20 m). Driving uses CharacterBody3D with a procedural
+spring/load model; this is an arcade controller rather than a full rigid-body
+vehicle simulation.
+Visible axle links, dampers, coil springs, and raised wheel arches connect
+each wheel to the chassis. Link endpoints are weighted separately to the
+chassis and suspension bones so they remain attached during body motion.
+
+
+LEVEL TIMER, MONEY, AND REPAIRS
+Select the level root to set level_duration_seconds (180), starting_money
+(200), starting_luck_range (10), and repair_pad_path. Starting money is
+$200 plus a random integer from -$10 to +$10. Time-up stops driving and
+opens the round summary; N or the New Round button restarts.
+Controller settings pause the timer; the repair menu does not.
+
+Damage reduces top speed and acceleration, down to 30% performance near
+zero health. Below 25% health the truck loses 0.7 health per second.
+Select the truck root to tune damaged_speed_floor, critical_health_ratio,
+and critical_health_drain.
+
+Stop at the orange REPAIR pad (ParkingPads/ParkingPad_04) to buy repairs.
+Full fix restores all remaining damage at $1.60 per health (minimum $12).
+Good fix restores half remaining damage at $2.20 per health (minimum $8).
+Mid fix restores a quarter remaining damage at $3 per health (minimum $5).
+Prices round up to whole dollars. Full repairs cost more now but offer the
+best value per health point. Each purchase uses the current remaining
+damage, checks available money, and cannot spend at full health.
+Repair rates and minimum prices are editable on the repair-pad root.
+scenes/repair_pad.tscn is reusable, including its zone and repair sign.
+D-pad/arrows select an option; A/Enter buys; driving away closes the menu.
+
+UPGRADES
+Stop at the orange repair pad and choose the Upgrades tab.
+Booster $60: installs an empty boost tank. Canisters $20: refill 50%.
+Hold RB / Shift with acceleration to boost. Full tank lasts 4 seconds;
+boost gives 1.6x top speed and 2.2x acceleration. Braking stops boost.
+Drifting $70: brake + steer, with throttle to power through the slide;
+release brake to accelerate out. Boost does not activate while braking.
+Lift kit $80: raises the chassis and increases obstacle clearance from
+0.65m to 1.1m. Hit trees at driving speed to knock them down for 2 health
+before armor; standing trees still block a truck without the lift kit.
+Armor $65: reduces impact, curb, and tree damage by 45%. Critical health
+continues to drain. Purchases use round money and persist after reset/tow.
+New rounds reset upgrades and fuel. Full tanks and installed upgrades
+cannot be bought again; canisters require the booster first.
+Prices and canister refill amount are editable on the level root.
+Boost, lift, and armor effects are editable on the FoodTruck root.
+HUD shop tabs and meter are saved nodes in scenes/hud.tscn. Trees are
+editable instances of scenes/breakable_tree.tscn, with physical collision
+shapes and frozen rigid bodies that release when hit by a lifted truck.
+With Drifting installed, hold brake + steering + throttle from rest to pivot in place. The front axle holds position while the rear swings around it, and wheel rolling stays locked until you release brake; release brake to accelerate out.
+
+BOOST SMASH
+Boost into cones, benches, or the wooden crates on the east road to break
+through them. Impact must reach 8 m/s and the object's longest dimension
+must be at most 3 m. Normal driving and low-speed boost bumps do not break
+props. Each successful smash causes 1.5 health damage before armor.
+The truck root exposes boost_break_max_size and boost_break_damage.
+Props have a saved BoostBreakable child with enabled, visual_root, and
+minimum_impact_speed properties, plus editable Debris particles. Size is
+measured from the target meshes and includes object scaling. Attach the
+scenes/boost_breakable.tscn component under a physics body to opt another
+prop in; set visual_root to that prop's mesh/root. Buildings, ground, and
+curbs remain solid. New rounds restore broken props.
+
+
+MAIN MENU AND ROUND RESULTS
+The game opens on main_menu.tscn, with a slow side-on truck camera pan.
+New game starts a fresh level. Options changes controller settings that
+carry across menus and rounds for this session. Quit exits the game.
+
+Earn $150 before the three-minute timer ends to win. Starting cash and
+luck do not count; purchases do not reduce earned-income progress.
+Stop on a serving pad (not the orange repair pad) and open the kitchen
+with E / A. Nearby interested patrons approach, order, and pay after being served.
+The HUD tracks earned money against the goal. Reaching the goal opens
+Success immediately; running out of time first opens Game Over.
+Both result menus offer New round, Main menu, and Quit. Disabled trucks
+can still use the existing tow/repair system while time remains.
+
+Edit earnings_target, food_menu, and
+level_duration_seconds on the main.tscn root. The main menu camera
+origin, focus, pan_distance, and pan_speed are exported on its root.
+Menu buttons, display truck, camera, result panel, and options controls
+are saved scene nodes and can be moved or edited in the Godot editor.
+
+
+LIVE MENU CAMERA AND CONTROLLER SELECTION
+The main menu renders the actual Level/FoodTruck through MenuCamera.
+New game or A on its focused button starts a two-second camera orbit
+from the truck side to FollowCamera. The same truck and level continue
+into play; the round timer and driving start after the camera arrives.
+The level is a saved instance in main_menu.tscn; edit its camera_origin,
+camera_focus, pan_distance, pan_speed, and transition_duration properties.
+A activates focused buttons in the main menu, options, shops, and results.
+Stationary drift rotation is controlled by stationary_drift_turn_speed
+on FoodTruck (2.5 radians/second by default). Brake + steer + throttle
+from rest anchors the front axle with no wheel rolling; releasing brake drives
+out in the direction the truck is facing. Moving drifts remain available.
+
+Stationary drift pivots around the midpoint of the front wheel bones. Rear swing stops at solid obstacles.
+
+REVERSE DRIFT
+With Drifting installed, hold reverse + brake + steering. Keyboard:
+S / Down + Space + A/D. It works while reversing and from a standstill.
+From rest, the front axle stays planted and the rear swings in the
+reverse steering direction. Release brake while holding reverse to
+accelerate backward out of the drift. Reverse speed limits still apply.
+
+
+HUNGRY PATRONS
+Up to 12 rigged Kenney patrons spawn at three editable PatronSpawns markers,
+with a limit of 4 per point. They wander near their home point, starting
+with 65-100% interest and $18-$32 budgets. Each marker exposes its count,
+spawn interval, wander radius, starting interest range, and budget range.
+The PatronManager node sets the global cap and uses the reusable
+scenes/hungry_patron.tscn character, visuals, collider, and status label.
+Each patron randomly uses one of four Kenney character skins. Idle and Jump
+come from the Kenney pack; Walk, Run, and Dodge are CMU motion capture BVH
+clips baked onto the same rig. Wandering uses Walk, approaching the truck
+uses Run, and avoiding a truck uses Dodge. Set character_variant to 0-3 to
+choose a skin, or leave it at -1 for random selection. The capsule shape
+is only an invisible physics collider; the visible model is editable under
+VisualVariants in the patron scene. The Kenney asset license is in
+assets/kenney/License.txt (CC0).
+The motion capture is from the CMU Graphics Lab Motion Capture Database,
+BVH conversion by Bruce Hahne. Both permit use without restrictions. See
+../Motion_Sources/CMU/Terms.txt and ../Motion_Sources/README.txt in the
+OnTheFly project for source clips and Blender retargeting instructions.
+
+Green pads attract at most 4 interested patrons within 18 meters while
+the truck is stopped inside their area and its kitchen is fully open.
+Each patron orders up to 3 items, depending on interest and budget.
+Default menu: Taco $6, Burger $10, Drink $3. Change the level's food_menu
+resource array or assets/menu_*.tres to change names, prices, or choices.
+Orders take 1.2 seconds per item once the patron reaches the counter.
+Completed orders add their actual total to cash and earned-goal progress.
+There is no automatic income without paying customers.
+
+After eating, interest drops to 20% of its previous value and patrons
+have a 25-second cooldown, then interest slowly recovers. Their remaining
+budget still limits future orders. Closing the shop or leaving cancels
+unfinished orders without charging anyone. Labels show interest/orders;
+the HUD shows population, fed count, menu, pad time, and the latest sale.
+
+A pad's 45-second serving window starts the first time its kitchen opens.
+The countdown continues after closing or leaving. At zero it turns red,
+stops attracting patrons, and cancels unfinished orders. Other green pads
+remain available; new rounds reset them. Edit serving_duration,
+attraction_radius, and patron_capacity on each serving Area3D.
+The orange repair pad remains a repair and upgrade station.
+
+Patrons predict approaching truck movement and jump sideways out of its
+path, including when reversing. Their walk, dodge, jump, and interest
+recovery settings are exposed on the patron scene. The wider kitchen
+camera keeps the serving window and nearby patrons visible together.
+
+
+PAUSE, VIDEO AND AUDIO OPTIONS
+Press controller Start / keyboard Escape, or click Pause / Start on the
+HUD to open Resume, Options, and Quit game. Pausing freezes the level
+timer, truck, and patrons. Start resumes from the pause menu. Options
+opened from pause returns to that menu using Back. View / Tab still
+opens Options directly. Start no longer restarts a finished round; use
+N or select the New round button with A / Enter.
+
+Options is shared by the main menu and pause menu. Video settings:
+fullscreen, window size (1280x800, 1440x900, 1600x1000), V-Sync, and
+anti-aliasing (off, 2x, 4x). Window size applies in windowed mode.
+Master volume controls the Master audio bus; 0% mutes it. Test sound
+plays a short tone at the selected level. Settings apply immediately
+and carry across scenes for the current session.
+The editable UI is scenes/options_panel.tscn; pause buttons are saved
+in scenes/hud.tscn. Audio preview is assets/volume_test.tres.
+
+
+PARKING METER, RED PAD FEE, AND ROUND BALANCE
+Each green serving pad has a live meter above it. The meter is a saved
+camera-facing Sprite3D driven by an editable SubViewport/ProgressBar.
+It starts at 45 seconds. Opening the kitchen on that pad starts its timer;
+the meter continues draining after closing or driving away.
+
+While the kitchen is open on a pad, its 3D meter hides and an enlarged
+progress bar appears below the timer in the screen HUD. Closing restores
+the world meter. When time runs out, the pad and meter turn red.
+Serving on a red pad charges $5 immediately and another $5 for every
+5 seconds the kitchen remains open there. Closing stops the fee timer;
+reopening continues it. Money cannot fall below $0. The red HUD shows
+the fee and the total paid that round. Expired pads do not take orders.
+Select any green ParkingPad in the level to change serving_duration,
+expired_fee, and expired_fee_interval in the Inspector.
+
+Money earned and unspent from sales, after repairs, upgrades, and fees,
+carries into the next round when selecting New round / N. The timer,
+earnings goal, pads, and patrons reset. New game from the main menu
+starts a fresh run with $200 plus starting luck. Balance is kept while
+the game is open; quitting the application ends that run.

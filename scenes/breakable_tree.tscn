@@ -1,0 +1,48 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://breakable_tree.gd" id="1_0vuqx"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_mldrc"]
+albedo_color = Color(0.48235294, 0.39215687, 0.29411766, 1)
+roughness = 0.8
+
+[sub_resource type="BoxMesh" id="BoxMesh_1tiwm"]
+size = Vector3(0.45, 3, 0.45)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_rkju4"]
+albedo_color = Color(0.2784314, 0.49019608, 0.3764706, 1)
+roughness = 0.8
+
+[sub_resource type="SphereMesh" id="SphereMesh_um25j"]
+radius = 1.9
+height = 3.8
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_yu0ur"]
+size = Vector3(0.45, 3, 0.45)
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_2tusj"]
+radius = 1.9
+
+[node name="BreakableTree" type="RigidBody3D" unique_id=1035392173 groups=["breakable_trees"]]
+mass = 12.0
+freeze = true
+angular_damp = 0.8
+script = ExtResource("1_0vuqx")
+
+[node name="Trunk" type="MeshInstance3D" parent="." unique_id=1708610740]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 0)
+material_override = SubResource("StandardMaterial3D_mldrc")
+mesh = SubResource("BoxMesh_1tiwm")
+
+[node name="Crown" type="MeshInstance3D" parent="." unique_id=1011328850]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.8, 0)
+material_override = SubResource("StandardMaterial3D_rkju4")
+mesh = SubResource("SphereMesh_um25j")
+
+[node name="TrunkCollision" type="CollisionShape3D" parent="." unique_id=438062454]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 0)
+shape = SubResource("BoxShape3D_yu0ur")
+
+[node name="CrownCollision" type="CollisionShape3D" parent="." unique_id=208039170]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.8, 0)
+shape = SubResource("SphereShape3D_2tusj")

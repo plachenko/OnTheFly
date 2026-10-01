@@ -1,0 +1,20 @@
+# Godot's regenerated project cache and local editor state.
+.godot/
+.import/
+.mono/
+
+# Python and Blender working files. Regenerate the annotated/rigged sources
+# with the scripts in tools/; the exported GLBs used by Godot are committed.
+__pycache__/
+*.py[cod]
+*.blend1
+*.blend2
+tools/kenney_outward_faces/*.blend
+tools/rigged_cars/*.blend
+
+# Local exports and temporary files.
+*.tmp
+*.log
+Street_Kitchen_Windows/
+build/
+dist/

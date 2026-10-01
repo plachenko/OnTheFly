@@ -1,0 +1,22 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://repair_pad.gd" id="1_dl8sa"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_ycdy4"]
+size = Vector3(8.5, 3, 10.5)
+
+[node name="ParkingPad_04" type="Area3D" unique_id=1021986757]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 36, 1.5, 23)
+collision_layer = 0
+script = ExtResource("1_dl8sa")
+
+[node name="ParkingZone" type="CollisionShape3D" parent="." unique_id=906767024]
+shape = SubResource("BoxShape3D_ycdy4")
+
+[node name="RepairSign" type="Label3D" parent="." unique_id=1524692239]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.7, 4.8)
+pixel_size = 0.009
+billboard = 1
+text = "REPAIR
+STOP TO FIX"
+font_size = 70

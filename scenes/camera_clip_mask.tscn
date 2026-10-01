@@ -1,0 +1,22 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Shader" path="res://camera_clip_mask.gdshader" id="1_shader"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_mask"]
+shader = ExtResource("1_shader")
+shader_parameter/strength = 0.0
+shader_parameter/clear_radius = 0.28
+shader_parameter/feather = 0.045
+
+[node name="CameraClipMask" type="CanvasLayer"]
+layer = 20
+
+[node name="Mask" type="ColorRect" parent="."]
+material = SubResource("ShaderMaterial_mask")
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(1, 1, 1, 1)

@@ -1,0 +1,587 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://controller_settings.gd" id="1_ahhtf"]
+[ext_resource type="PackedScene" path="res://scenes/options_panel.tscn" id="2_oo0fn"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_oo0fn"]
+bg_color = Color(0.8901961, 0.49019608, 0.3019608, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ahhtf"]
+bg_color = Color(0.025, 0.09, 0.1, 0.97)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_5ysmq"]
+bg_color = Color(0.025, 0.09, 0.1, 0.97)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_6fi6k"]
+bg_color = Color(0.025, 0.09, 0.1, 0.97)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_uo2fv"]
+bg_color = Color(0.30980393, 0.80784315, 0.87058824, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_047uy"]
+bg_color = Color(0.025, 0.075, 0.085, 0.87)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_h4533"]
+bg_color = Color(0.025, 0.065, 0.075, 0.98)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_5pdws"]
+bg_color = Color(0.025, 0.065, 0.075, 0.98)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_hd3ao"]
+bg_color = Color(0.025, 0.09, 0.065, 0.93)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_0i1j5"]
+bg_color = Color(0.3019608, 0.7921569, 0.47058824, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_mphia"]
+bg_color = Color(0.93333334, 0.38431373, 0.3372549, 1)
+
+[node name="HUD" type="CanvasLayer" unique_id=1063619370]
+process_mode = 3
+script = ExtResource("1_ahhtf")
+
+[node name="Layout" type="Control" parent="." unique_id=1433409396]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="TitlePanel" type="ColorRect" parent="Layout" unique_id=1954541362]
+layout_mode = 0
+offset_left = 22.0
+offset_top = 22.0
+offset_right = 352.0
+offset_bottom = 116.0
+mouse_filter = 2
+color = Color(0.04, 0.12, 0.14, 0.88)
+
+[node name="@Label@161" type="Label" parent="Layout/TitlePanel" unique_id=671557345]
+layout_mode = 0
+offset_left = 18.0
+offset_top = 12.0
+offset_right = 18.0
+offset_bottom = 12.0
+theme_override_font_sizes/font_size = 25
+theme_override_colors/font_color = Color(0.9490196, 0.8980392, 0.77254903, 1)
+text = "STREET KITCHEN"
+
+[node name="@Label@162" type="Label" parent="Layout/TitlePanel" unique_id=350330665]
+layout_mode = 0
+offset_left = 19.0
+offset_top = 49.0
+offset_right = 19.0
+offset_bottom = 49.0
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.5372549, 0.78431374, 0.7490196, 1)
+text = "TRUCK PLAYGROUND"
+
+[node name="ControlsPanel" type="ColorRect" parent="Layout" unique_id=82681038]
+layout_mode = 0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -105.0
+mouse_filter = 2
+color = Color(0.04, 0.12, 0.14, 0.9)
+
+[node name="@Label@164" type="Label" parent="Layout/ControlsPanel" unique_id=913031390]
+layout_mode = 0
+offset_left = 26.0
+offset_top = 16.0
+offset_right = 26.0
+offset_bottom = 16.0
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(0.9490196, 0.8980392, 0.77254903, 1)
+text = "RT/LT Drive   B/X Brake   Stick Steer   D-pad Left/Right Signal   Up Lights   Down Hazards (twice: FSD)   A Kitchen   Start Pause"
+
+[node name="@Label@165" type="Label" parent="Layout/ControlsPanel" unique_id=1877974997]
+layout_mode = 0
+offset_left = 26.0
+offset_top = 48.0
+offset_right = 26.0
+offset_bottom = 48.0
+theme_override_font_sizes/font_size = 15
+theme_override_colors/font_color = Color(0.5372549, 0.78431374, 0.7490196, 1)
+text = "Keyboard: WASD / Space brake / J,L signals / K hazards (twice: FSD) / H lights / E kitchen / R reset   •   Right stick or mouse: camera"
+
+[node name="StatusLabel" type="Label" parent="Layout/ControlsPanel" unique_id=2125687951]
+layout_mode = 0
+offset_left = 26.0
+offset_top = 77.0
+offset_right = 26.0
+offset_bottom = 77.0
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.9607843, 0.7176471, 0.42352942, 1)
+
+[node name="SpeedLabel" type="Label" parent="Layout" unique_id=2016162223]
+layout_mode = 0
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -200.0
+offset_top = 29.0
+offset_right = -99.0
+offset_bottom = 71.0
+theme_override_font_sizes/font_size = 30
+theme_override_colors/font_color = Color(0.9490196, 0.8980392, 0.77254903, 1)
+text = "0 km/h"
+
+[node name="LoadLabel" type="Label" parent="Layout" unique_id=1603543532]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 130.0
+offset_right = 24.0
+offset_bottom = 130.0
+theme_override_font_sizes/font_size = 16
+theme_override_colors/font_color = Color(0.9490196, 0.8980392, 0.77254903, 1)
+theme_override_colors/font_shadow_color = Color(0.07058824, 0.19607843, 0.21960784, 1)
+theme_override_constants/shadow_offset_x = 1
+theme_override_constants/shadow_offset_y = 1
+
+[node name="DamagePanel" type="Panel" parent="Layout" unique_id=1655542133]
+layout_mode = 0
+offset_left = 1025.0
+offset_top = 92.0
+offset_right = 1255.0
+offset_bottom = 168.0
+
+[node name="DamageLabel" type="Label" parent="Layout/DamagePanel" unique_id=475137046]
+layout_mode = 0
+offset_left = 14.0
+offset_top = 8.0
+offset_right = 14.0
+offset_bottom = 8.0
+theme_override_font_sizes/font_size = 18
+text = "DAMAGE 0%"
+
+[node name="DamageBar" type="ProgressBar" parent="Layout/DamagePanel" unique_id=768407694]
+layout_mode = 0
+offset_left = 14.0
+offset_top = 40.0
+offset_right = 216.0
+offset_bottom = 67.0
+theme_override_styles/fill = SubResource("StyleBoxFlat_oo0fn")
+show_percentage = false
+
+[node name="SessionPanel" type="Panel" parent="Layout" unique_id=1824627690]
+layout_mode = 0
+offset_left = 410.0
+offset_top = 22.0
+offset_right = 845.0
+offset_bottom = 116.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_ahhtf")
+
+[node name="TimeLabel" type="Label" parent="Layout/SessionPanel" unique_id=1956697556]
+layout_mode = 0
+offset_left = 18.0
+offset_top = 12.0
+offset_right = 18.0
+offset_bottom = 12.0
+theme_override_font_sizes/font_size = 26
+text = "TIME 3:00"
+
+[node name="MoneyLabel" type="Label" parent="Layout/SessionPanel" unique_id=1692854117]
+layout_mode = 0
+offset_left = 220.0
+offset_top = 12.0
+offset_right = 220.0
+offset_bottom = 12.0
+theme_override_font_sizes/font_size = 24
+text = "MONEY $200"
+
+[node name="LuckLabel" type="Label" parent="Layout/SessionPanel" unique_id=1202805265]
+layout_mode = 0
+offset_left = 220.0
+offset_top = 55.0
+offset_right = 220.0
+offset_bottom = 55.0
+theme_override_font_sizes/font_size = 14
+text = "Starting luck +$0"
+
+[node name="GoalLabel" type="Label" parent="Layout/SessionPanel" unique_id=1698509892]
+layout_mode = 0
+offset_left = 18.0
+offset_top = 73.0
+offset_right = 18.0
+offset_bottom = 73.0
+theme_override_font_sizes/font_size = 13
+text = "Protect your truck. Repair at the orange pad."
+
+[node name="RepairPanel" type="Panel" parent="Layout" unique_id=759121544]
+visible = false
+layout_mode = 0
+offset_left = 350.0
+offset_top = 160.0
+offset_right = 930.0
+offset_bottom = 635.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_5ysmq")
+
+[node name="Title" type="Label" parent="Layout/RepairPanel" unique_id=276164688]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 18.0
+offset_right = 24.0
+offset_bottom = 18.0
+theme_override_font_sizes/font_size = 25
+text = "TRUCK SERVICE STATION"
+
+[node name="HealthLabel" type="Label" parent="Layout/RepairPanel" unique_id=1096683514]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 60.0
+offset_right = 24.0
+offset_bottom = 60.0
+theme_override_font_sizes/font_size = 18
+text = "Health / balance"
+
+[node name="FullFix" type="Button" parent="Layout/RepairPanel" unique_id=143931418]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 150.0
+offset_right = 556.0
+offset_bottom = 196.0
+text = "Full fix"
+
+[node name="GoodFix" type="Button" parent="Layout/RepairPanel" unique_id=852674970]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 208.0
+offset_right = 556.0
+offset_bottom = 254.0
+text = "Good fix"
+
+[node name="MidFix" type="Button" parent="Layout/RepairPanel" unique_id=1018389097]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 266.0
+offset_right = 556.0
+offset_bottom = 312.0
+text = "Mid fix"
+
+[node name="Hint" type="Label" parent="Layout/RepairPanel" unique_id=439706180]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 340.0
+offset_right = 25.0
+offset_bottom = 363.0
+theme_override_font_sizes/font_size = 17
+text = "Full fix offers the best long-term value."
+
+[node name="TimeHint" type="Label" parent="Layout/RepairPanel" unique_id=496898883]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 430.0
+offset_right = 25.0
+offset_bottom = 453.0
+theme_override_font_sizes/font_size = 14
+text = "D-pad / arrows select • A / Enter buy • Drive away to close"
+
+[node name="RepairsTab" type="Button" parent="Layout/RepairPanel" unique_id=821356233]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 93.0
+offset_right = 288.0
+offset_bottom = 133.0
+text = "Repairs"
+
+[node name="UpgradesTab" type="Button" parent="Layout/RepairPanel" unique_id=1012923635]
+layout_mode = 0
+offset_left = 296.0
+offset_top = 93.0
+offset_right = 560.0
+offset_bottom = 133.0
+text = "Upgrades"
+
+[node name="UpgradeList" type="Control" parent="Layout/RepairPanel" unique_id=277375889]
+visible = false
+anchors_preset = 0
+offset_left = 24.0
+offset_top = 145.0
+offset_right = 556.0
+offset_bottom = 461.0
+
+[node name="Booster" type="Button" parent="Layout/RepairPanel/UpgradeList" unique_id=1666284232]
+layout_mode = 0
+offset_right = 532.0
+offset_bottom = 37.0
+text = "Booster"
+
+[node name="Canister" type="Button" parent="Layout/RepairPanel/UpgradeList" unique_id=274615571]
+layout_mode = 0
+offset_top = 42.0
+offset_right = 532.0
+offset_bottom = 79.0
+text = "Canister"
+
+[node name="Drifting" type="Button" parent="Layout/RepairPanel/UpgradeList" unique_id=121461261]
+layout_mode = 0
+offset_top = 84.0
+offset_right = 532.0
+offset_bottom = 121.0
+text = "Drifting"
+
+[node name="LiftKit" type="Button" parent="Layout/RepairPanel/UpgradeList" unique_id=72916637]
+layout_mode = 0
+offset_top = 126.0
+offset_right = 532.0
+offset_bottom = 163.0
+text = "LiftKit"
+
+[node name="Armor" type="Button" parent="Layout/RepairPanel/UpgradeList" unique_id=408413751]
+layout_mode = 0
+offset_top = 168.0
+offset_right = 532.0
+offset_bottom = 205.0
+text = "Armor"
+
+[node name="FullSelfDriving" type="Button" parent="Layout/RepairPanel/UpgradeList"]
+layout_mode = 0
+offset_top = 210.0
+offset_right = 532.0
+offset_bottom = 247.0
+text = "Full Self Driving"
+
+[node name="Help" type="Label" parent="Layout/RepairPanel/UpgradeList" unique_id=143877501]
+layout_mode = 0
+offset_top = 253.0
+offset_bottom = 319.0
+theme_override_font_sizes/font_size = 15
+text = "Boost: hold RB / Shift. Canisters refill the meter.
+Drift: brake + steer. Lift: taller obstacles. Armor: less damage.
+FSD: press K / D-pad Down twice; drive or steer to take over."
+
+[node name="RoundEndPanel" type="Panel" parent="Layout" unique_id=1632714255]
+visible = false
+layout_mode = 0
+offset_left = 370.0
+offset_top = 180.0
+offset_right = 910.0
+offset_bottom = 635.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_6fi6k")
+
+[node name="Title" type="Label" parent="Layout/RoundEndPanel" unique_id=1607044529]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 18.0
+offset_right = 24.0
+offset_bottom = 18.0
+theme_override_font_sizes/font_size = 32
+text = "TIME'S UP"
+
+[node name="Summary" type="Label" parent="Layout/RoundEndPanel" unique_id=176903972]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 80.0
+offset_right = 25.0
+offset_bottom = 103.0
+theme_override_font_sizes/font_size = 19
+text = "Round complete"
+
+[node name="Restart" type="Button" parent="Layout/RoundEndPanel" unique_id=1154593978]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 190.0
+offset_right = 516.0
+offset_bottom = 242.0
+text = "New round (N)"
+
+[node name="Hint" type="Label" parent="Layout/RoundEndPanel" unique_id=1420635597]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 403.0
+offset_right = 25.0
+offset_bottom = 426.0
+theme_override_font_sizes/font_size = 15
+text = "D-pad / arrows to select • A / Enter to confirm"
+
+[node name="MainMenu" type="Button" parent="Layout/RoundEndPanel" unique_id=1008303633]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 255.0
+offset_right = 516.0
+offset_bottom = 307.0
+theme_override_font_sizes/font_size = 22
+text = "Main menu"
+
+[node name="Quit" type="Button" parent="Layout/RoundEndPanel" unique_id=369802554]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 320.0
+offset_right = 516.0
+offset_bottom = 372.0
+theme_override_font_sizes/font_size = 22
+text = "Quit"
+
+[node name="BoostPanel" type="Panel" parent="Layout" unique_id=1593889427]
+layout_mode = 0
+offset_left = 945.0
+offset_top = 180.0
+offset_right = 1255.0
+offset_bottom = 247.0
+
+[node name="BoostLabel" type="Label" parent="Layout/BoostPanel" unique_id=1020824079]
+layout_mode = 0
+offset_left = 12.0
+offset_top = 10.0
+offset_right = 12.0
+offset_bottom = 10.0
+theme_override_font_sizes/font_size = 14
+text = "BOOST — BUY BOOSTER + CANISTERS"
+
+[node name="BoostMeter" type="ProgressBar" parent="Layout/BoostPanel" unique_id=1618386095]
+layout_mode = 0
+offset_left = 12.0
+offset_top = 38.0
+offset_right = 298.0
+offset_bottom = 65.0
+theme_override_styles/fill = SubResource("StyleBoxFlat_uo2fv")
+show_percentage = false
+
+[node name="PatronPanel" type="Panel" parent="Layout" unique_id=1870703289]
+layout_mode = 0
+offset_left = 22.0
+offset_top = 190.0
+offset_right = 332.0
+offset_bottom = 390.0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_047uy")
+
+[node name="Info" type="Label" parent="Layout/PatronPanel" unique_id=2012960886]
+layout_mode = 0
+offset_left = 12.0
+offset_top = 12.0
+offset_right = 298.0
+offset_bottom = 188.0
+theme_override_font_sizes/font_size = 15
+autowrap_mode = 3
+
+[node name="ControllerPanel" type="Panel" parent="Layout" unique_id=1543347601 instance=ExtResource("2_oo0fn")]
+visible = false
+layout_mode = 0
+offset_left = 200.0
+offset_top = 125.0
+offset_right = 1080.0
+offset_bottom = 675.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_h4533")
+
+[node name="PausePanel" type="Panel" parent="Layout" unique_id=235147208]
+visible = false
+layout_mode = 0
+offset_left = 430.0
+offset_top = 205.0
+offset_right = 850.0
+offset_bottom = 570.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_5pdws")
+
+[node name="Title" type="Label" parent="Layout/PausePanel" unique_id=616547703]
+layout_mode = 0
+offset_left = 30.0
+offset_top = 25.0
+offset_right = 30.0
+offset_bottom = 25.0
+theme_override_font_sizes/font_size = 32
+text = "PAUSED"
+
+[node name="Resume" type="Button" parent="Layout/PausePanel" unique_id=492450532]
+layout_mode = 0
+offset_left = 30.0
+offset_top = 100.0
+offset_right = 390.0
+offset_bottom = 155.0
+theme_override_font_sizes/font_size = 19
+text = "Resume"
+
+[node name="Options" type="Button" parent="Layout/PausePanel" unique_id=970363965]
+layout_mode = 0
+offset_left = 30.0
+offset_top = 180.0
+offset_right = 390.0
+offset_bottom = 235.0
+theme_override_font_sizes/font_size = 19
+text = "Options"
+
+[node name="Quit" type="Button" parent="Layout/PausePanel" unique_id=2036963122]
+layout_mode = 0
+offset_left = 30.0
+offset_top = 260.0
+offset_right = 390.0
+offset_bottom = 315.0
+theme_override_font_sizes/font_size = 19
+text = "Quit game"
+
+[node name="StartButton" type="Button" parent="Layout" unique_id=151804749]
+layout_mode = 0
+offset_left = 1090.0
+offset_top = 262.0
+offset_right = 1255.0
+offset_bottom = 302.0
+theme_override_font_sizes/font_size = 19
+text = "Pause / Start"
+
+[node name="PadMeter" type="Panel" parent="Layout" unique_id=1195326268]
+visible = false
+layout_mode = 0
+offset_left = 410.0
+offset_top = 120.0
+offset_right = 810.0
+offset_bottom = 202.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_hd3ao")
+
+[node name="Caption" type="Label" parent="Layout/PadMeter" unique_id=802251318]
+layout_mode = 0
+offset_left = 14.0
+offset_top = 5.0
+offset_right = 14.0
+offset_bottom = 5.0
+theme_override_font_sizes/font_size = 18
+text = "SERVING WINDOW"
+
+[node name="Progress" type="ProgressBar" parent="Layout/PadMeter" unique_id=1714954053]
+layout_mode = 0
+offset_left = 14.0
+offset_top = 33.0
+offset_right = 386.0
+offset_bottom = 60.0
+theme_override_styles/fill = SubResource("StyleBoxFlat_0i1j5")
+value = 100.0
+show_percentage = false
+metadata/green_fill = SubResource("StyleBoxFlat_0i1j5")
+metadata/red_fill = SubResource("StyleBoxFlat_mphia")
+
+[node name="Fee" type="Label" parent="Layout/PadMeter" unique_id=1515453840]
+layout_mode = 0
+offset_left = 14.0
+offset_top = 58.0
+offset_right = 14.0
+offset_bottom = 58.0
+theme_override_font_sizes/font_size = 13

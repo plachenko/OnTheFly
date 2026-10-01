@@ -1,0 +1,56 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/boost_breakable.tscn" id="1_1pvhk"]
+[ext_resource type="Script" path="res://boost_breakable.gd" id="2_666jn"]
+
+[sub_resource type="PhysicsMaterial" id="PhysicsMaterial_htnpy"]
+friction = 0.8
+bounce = 0.05
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_04qlx"]
+albedo_color = Color(0.15686275, 0.19607843, 0.22352941, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_1pvhk"]
+size = Vector3(0.65, 0.12, 0.65)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_666jn"]
+albedo_color = Color(0.90588236, 0.50980395, 0.21960784, 1)
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_iemwe"]
+top_radius = 0.06
+bottom_radius = 0.28
+height = 0.85
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_ddcyk"]
+size = Vector3(0.65, 0.12, 0.65)
+
+[sub_resource type="ConvexPolygonShape3D" id="ConvexPolygonShape3D_s0vbq"]
+points = PackedVector3Array(0.28, 0.105, 0, 0.06, 0.955, 0, 0.24248712, 0.105, 0.14, 0.051961523, 0.955, 0.03, 0.14, 0.105, 0.24248712, 0.03, 0.955, 0.051961523, 1.714449e-17, 0.105, 0.28, 3.673819e-18, 0.955, 0.06, -0.14, 0.105, 0.24248712, -0.03, 0.955, 0.051961523, -0.24248712, 0.105, 0.14, -0.051961523, 0.955, 0.03, -0.28, 0.105, 3.428898e-17, -0.06, 0.955, 7.347638e-18, -0.24248712, 0.105, -0.14, -0.051961523, 0.955, -0.03, -0.14, 0.105, -0.24248712, -0.03, 0.955, -0.051961523, -5.143347e-17, 0.105, -0.28, -1.1021457e-17, 0.955, -0.06, 0.14, 0.105, -0.24248712, 0.03, 0.955, -0.051961523, 0.24248712, 0.105, -0.14, 0.051961523, 0.955, -0.03)
+
+[node name="TrafficCone" type="RigidBody3D" unique_id=2096472266 groups=["traffic_cones"]]
+mass = 2.0
+physics_material_override = SubResource("PhysicsMaterial_htnpy")
+center_of_mass_mode = 1
+center_of_mass = Vector3(0, 0.22, 0)
+linear_damp = 0.35
+angular_damp = 0.6
+
+[node name="Base" type="MeshInstance3D" parent="." unique_id=923823862]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.06, 0)
+material_override = SubResource("StandardMaterial3D_04qlx")
+mesh = SubResource("BoxMesh_1pvhk")
+
+[node name="Cone" type="MeshInstance3D" parent="." unique_id=607571181]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.53, 0)
+material_override = SubResource("StandardMaterial3D_666jn")
+mesh = SubResource("CylinderMesh_iemwe")
+
+[node name="BaseCollision" type="CollisionShape3D" parent="." unique_id=11826454]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.06, 0)
+shape = SubResource("BoxShape3D_ddcyk")
+
+[node name="ConeCollision" type="CollisionShape3D" parent="." unique_id=171451892]
+shape = SubResource("ConvexPolygonShape3D_s0vbq")
+
+[node name="BoostBreakable" type="Node3D" parent="." unique_id=1090130369 instance=ExtResource("1_1pvhk")]
+script = ExtResource("2_666jn")

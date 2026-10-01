@@ -1,0 +1,258 @@
+{
+  "building-a.glb": {
+    "confidence": 0.277,
+    "outward_face": "-Z",
+    "outward_normal": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "scores": {
+      "+X": 616.206,
+      "+Z": 457.16,
+      "-X": 405.498,
+      "-Z": 852.314
+    },
+    "vertex_group": "OutwardFace"
+  },
+  "building-b.glb": {
+    "confidence": 0.075,
+    "outward_face": "+X",
+    "outward_normal": [
+      1.0,
+      0.0,
+      0.0
+    ],
+    "scores": {
+      "+X": 673.573,
+      "+Z": 590.571,
+      "-X": 597.707,
+      "-Z": 622.991
+    },
+    "vertex_group": "OutwardFace"
+  },
+  "building-c.glb": {
+    "confidence": 0.101,
+    "outward_face": "-Z",
+    "outward_normal": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "scores": {
+      "+X": 490.246,
+      "+Z": 619.178,
+      "-X": 549.815,
+      "-Z": 688.881
+    },
+    "vertex_group": "OutwardFace"
+  },
+  "building-d.glb": {
+    "confidence": 0.139,
+    "outward_face": "-Z",
+    "outward_normal": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "scores": {
+      "+X": 469.52,
+      "+Z": 505.07,
+      "-X": 422.117,
+      "-Z": 586.539
+    },
+    "vertex_group": "OutwardFace"
+  },
+  "building-e.glb": {
+    "confidence": 0.112,
+    "outward_face": "-Z",
+    "outward_normal": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "scores": {
+      "+X": 619.213,
+      "+Z": 711.613,
+      "-X": 365.844,
+      "-Z": 801.678
+    },
+    "vertex_group": "OutwardFace"
+  },
+  "building-f.glb": {
+    "confidence": 0.261,
+    "outward_face": "-Z",
+    "outward_normal": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "scores": {
+      "+X": 696.814,
+      "+Z": 803.022,
+      "-X": 602.643,
+      "-Z": 1086.2
+    },
+    "vertex_group": "OutwardFace"
+  },
+  "building-g.glb": {
+    "confidence": 0.386,
+    "outward_face": "-Z",
+    "outward_normal": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "scores": {
+      "+X": 758.406,
+      "+Z": 695.06,
+      "-X": 810.407,
+      "-Z": 1320.466
+    },
+    "vertex_group": "OutwardFace"
+  },
+  "building-h.glb": {
+    "confidence": 0.237,
+    "outward_face": "-Z",
+    "outward_normal": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "scores": {
+      "+X": 671.389,
+      "+Z": 721.896,
+      "-X": 593.298,
+      "-Z": 946.743
+    },
+    "vertex_group": "OutwardFace"
+  },
+  "building-i.glb": {
+    "confidence": 0.185,
+    "outward_face": "-Z",
+    "outward_normal": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "scores": {
+      "+X": 1170.534,
+      "+Z": 1169.062,
+      "-X": 1170.534,
+      "-Z": 1436.762
+    },
+    "vertex_group": "OutwardFace"
+  },
+  "building-j.glb": {
+    "confidence": 0.003,
+    "outward_face": "+Z",
+    "outward_normal": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "scores": {
+      "+X": 1810.081,
+      "+Z": 2870.616,
+      "-X": 1754.685,
+      "-Z": 2861.447
+    },
+    "vertex_group": "OutwardFace"
+  },
+  "building-k.glb": {
+    "confidence": 0.095,
+    "outward_face": "-Z",
+    "outward_normal": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "scores": {
+      "+X": 968.678,
+      "+Z": 1428.635,
+      "-X": 1003.811,
+      "-Z": 1578.907
+    },
+    "vertex_group": "OutwardFace"
+  },
+  "building-l.glb": {
+    "confidence": 0.193,
+    "outward_face": "-Z",
+    "outward_normal": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "scores": {
+      "+X": 1546.993,
+      "+Z": 1510.785,
+      "-X": 1309.202,
+      "-Z": 1917.431
+    },
+    "vertex_group": "OutwardFace"
+  },
+  "building-m.glb": {
+    "confidence": 0.064,
+    "outward_face": "-Z",
+    "outward_normal": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "scores": {
+      "+X": 1732.278,
+      "+Z": 1666.879,
+      "-X": 1732.278,
+      "-Z": 1849.879
+    },
+    "vertex_group": "OutwardFace"
+  },
+  "building-n.glb": {
+    "confidence": 0.178,
+    "outward_face": "+Z",
+    "outward_normal": [
+      0.0,
+      0.0,
+      1.0
+    ],
+    "scores": {
+      "+X": 2406.347,
+      "+Z": 2926.813,
+      "-X": 77.909,
+      "-Z": 1871.579
+    },
+    "vertex_group": "OutwardFace"
+  },
+  "building-skyscraper-a.glb": {
+    "confidence": 0.282,
+    "outward_face": "-Z",
+    "outward_normal": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "scores": {
+      "+X": 532.097,
+      "+Z": 503.771,
+      "-X": 504.679,
+      "-Z": 741.079
+    },
+    "vertex_group": "OutwardFace"
+  },
+  "building-skyscraper-b.glb": {
+    "confidence": 0.28,
+    "outward_face": "-Z",
+    "outward_normal": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "scores": {
+      "+X": 608.897,
+      "+Z": 605.988,
+      "-X": 608.897,
+      "-Z": 845.297
+    },
+    "vertex_group": "OutwardFace"
+  }
+}

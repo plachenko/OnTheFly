@@ -1,0 +1,367 @@
+[gd_scene format=3 uid="uid://3kbcidufqdc0"]
+
+[ext_resource type="Script" uid="uid://cajo1ad4aluvg" path="res://game.gd" id="1_6do8d"]
+[ext_resource type="PackedScene" path="res://scenes/camera_clip_mask.tscn" id="22_camera_mask"]
+[ext_resource type="Script" uid="uid://bcogomseu3ihb" path="res://food_menu_item.gd" id="2_lbcrs"]
+[ext_resource type="PackedScene" path="res://scenes/truck.tscn" id="3_etvrs"]
+[ext_resource type="Script" uid="uid://bkwhjcavxu5nl" path="res://parking_pad.gd" id="5_1h3ss"]
+[ext_resource type="PackedScene" path="res://scenes/repair_pad.tscn" id="6_npo8y"]
+[ext_resource type="PackedScene" path="res://scenes/hud.tscn" id="8_548ar"]
+[ext_resource type="Script" uid="uid://dahinqkviqs7v" path="res://patron_spawn.gd" id="10_1tvbx"]
+[ext_resource type="Script" uid="uid://c1shj7m2th46i" path="res://patron_manager.gd" id="11_kv1wi"]
+[ext_resource type="PackedScene" path="res://scenes/hungry_patron.tscn" id="12_sliiy"]
+[ext_resource type="Script" uid="uid://c6ek5np6kvy14" path="res://procedural_city.gd" id="13_qfj6i"]
+[ext_resource type="Shader" path="res://city_sky.gdshader" id="14_city_sky"]
+
+[sub_resource type="Resource" id="Resource_ryguw"]
+script = ExtResource("2_lbcrs")
+
+[sub_resource type="Resource" id="Resource_d13ii"]
+script = ExtResource("2_lbcrs")
+food_name = "Burger"
+price = 10
+
+[sub_resource type="Resource" id="Resource_1u8w0"]
+script = ExtResource("2_lbcrs")
+food_name = "Drink"
+price = 3
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_city_sky"]
+shader = ExtResource("14_city_sky")
+
+[sub_resource type="Sky" id="Sky_city"]
+sky_material = SubResource("ShaderMaterial_city_sky")
+
+[sub_resource type="Environment" id="Environment_kek77"]
+background_mode = 2
+sky = SubResource("Sky_city")
+background_color = Color(0.6627451, 0.79607844, 0.8235294, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.9019608, 0.9411765, 0.92941177, 1)
+ambient_light_energy = 0.4
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_fd6dt"]
+albedo_color = Color(0.40784314, 0.47843137, 0.4627451, 1)
+roughness = 0.8
+
+[sub_resource type="BoxMesh" id="BoxMesh_gttkg"]
+size = Vector3(9, 0.025, 11)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_kek77"]
+size = Vector3(8.5, 3, 10.5)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_0odxb"]
+albedo_color = Color(0.2901961, 0.70980394, 0.45490196, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_lswn8"]
+size = Vector3(8.7, 0.04, 10.7)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_d13ii"]
+bg_color = Color(0.3019608, 0.7921569, 0.47058824, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_1u8w0"]
+bg_color = Color(0.93333334, 0.38431373, 0.3372549, 1)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_4c57u"]
+size = Vector3(8.5, 3, 10.5)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_a6jrf"]
+albedo_color = Color(0.2901961, 0.70980394, 0.45490196, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_xuqvo"]
+size = Vector3(8.7, 0.04, 10.7)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_0odxb"]
+bg_color = Color(0.3019608, 0.7921569, 0.47058824, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_lswn8"]
+bg_color = Color(0.93333334, 0.38431373, 0.3372549, 1)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_efxa6"]
+size = Vector3(8.5, 3, 10.5)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_kq58d"]
+albedo_color = Color(0.2901961, 0.70980394, 0.45490196, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_seu75"]
+size = Vector3(8.7, 0.04, 10.7)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_a6jrf"]
+bg_color = Color(0.3019608, 0.7921569, 0.47058824, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_xuqvo"]
+bg_color = Color(0.93333334, 0.38431373, 0.3372549, 1)
+
+[node name="ProceduralCityLevel" type="Node3D" unique_id=1285822432]
+script = ExtResource("1_6do8d")
+food_menu = Array[Resource]([SubResource("Resource_ryguw"), SubResource("Resource_d13ii"), SubResource("Resource_1u8w0")])
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1603748623]
+environment = SubResource("Environment_kek77")
+
+[node name="Sun" type="DirectionalLight3D" parent="." unique_id=11188373]
+transform = Transform3D(0.81915206, 0.4262504, -0.38379753, 0, 0.66913056, 0.74314487, 0.57357645, -0.6087487, 0.54811966, 0, 0, 0)
+light_energy = 0.95
+shadow_enabled = true
+directional_shadow_max_distance = 120.0
+
+[node name="FollowCamera" type="Camera3D" parent="." unique_id=1714879033]
+transform = Transform3D(1, 0, 0, 0, 0.9129539, 0.4080627, 0, -0.4080627, 0.9129539, 0, 7.7, 29.2)
+current = true
+fov = 60.0
+far = 250.0
+
+[node name="CameraClipMask" parent="." instance=ExtResource("22_camera_mask")]
+
+[node name="FoodTruck" parent="." unique_id=32878106 instance=ExtResource("3_etvrs")]
+
+[node name="RoadMarkings" type="Node3D" parent="." unique_id=1816835491]
+
+[node name="ParkingPad_01" type="MeshInstance3D" parent="RoadMarkings" unique_id=1274353665]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 64, 0.035, -16)
+material_override = SubResource("StandardMaterial3D_fd6dt")
+mesh = SubResource("BoxMesh_gttkg")
+
+[node name="ParkingPads" type="Node3D" parent="." unique_id=2101918986]
+
+[node name="ParkingPad_01" type="Area3D" parent="ParkingPads" unique_id=1352736128]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 64, 1.5, -16)
+collision_layer = 0
+script = ExtResource("5_1h3ss")
+
+[node name="ParkingZone" type="CollisionShape3D" parent="ParkingPads/ParkingPad_01" unique_id=289252964]
+shape = SubResource("BoxShape3D_kek77")
+
+[node name="ServiceSurface" type="MeshInstance3D" parent="ParkingPads/ParkingPad_01" unique_id=1248718304]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1.44, 0)
+material_override = SubResource("StandardMaterial3D_0odxb")
+mesh = SubResource("BoxMesh_lswn8")
+
+[node name="ServiceSign" type="Label3D" parent="ParkingPads/ParkingPad_01" unique_id=349227310]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.7, 4.6)
+pixel_size = 0.008
+billboard = 1
+text = "SERVE HERE
+OPEN KITCHEN"
+font_size = 55
+
+[node name="WorldMeter" type="Node3D" parent="ParkingPads/ParkingPad_01" unique_id=386945240]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.2, 0)
+
+[node name="DisplayViewport" type="SubViewport" parent="ParkingPads/ParkingPad_01/WorldMeter" unique_id=1970539483]
+disable_3d = true
+transparent_bg = true
+size = Vector2i(360, 70)
+render_target_update_mode = 4
+
+[node name="Backing" type="ColorRect" parent="ParkingPads/ParkingPad_01/WorldMeter/DisplayViewport" unique_id=1747667743]
+offset_right = 360.0
+offset_bottom = 70.0
+color = Color(0.02, 0.09, 0.07, 0.88)
+
+[node name="Time" type="Label" parent="ParkingPads/ParkingPad_01/WorldMeter/DisplayViewport" unique_id=860591486]
+offset_left = 15.0
+offset_top = 4.0
+offset_right = 15.0
+offset_bottom = 4.0
+theme_override_font_sizes/font_size = 25
+text = "45s"
+
+[node name="Progress" type="ProgressBar" parent="ParkingPads/ParkingPad_01/WorldMeter/DisplayViewport" unique_id=1575547640]
+offset_left = 15.0
+offset_top = 43.0
+offset_right = 345.0
+offset_bottom = 70.0
+theme_override_styles/fill = SubResource("StyleBoxFlat_d13ii")
+value = 100.0
+show_percentage = false
+metadata/green_fill = SubResource("StyleBoxFlat_d13ii")
+metadata/red_fill = SubResource("StyleBoxFlat_1u8w0")
+
+[node name="WorldBar" type="Sprite3D" parent="ParkingPads/ParkingPad_01/WorldMeter" unique_id=1314984352]
+pixel_size = 0.012
+billboard = 1
+no_depth_test = true
+
+[node name="ParkingPad_02" type="Area3D" parent="ParkingPads" unique_id=629604039]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 64, 1.5, -3)
+collision_layer = 0
+script = ExtResource("5_1h3ss")
+
+[node name="ParkingZone" type="CollisionShape3D" parent="ParkingPads/ParkingPad_02" unique_id=101816932]
+shape = SubResource("BoxShape3D_4c57u")
+
+[node name="ServiceSurface" type="MeshInstance3D" parent="ParkingPads/ParkingPad_02" unique_id=1706607744]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1.44, 0)
+material_override = SubResource("StandardMaterial3D_a6jrf")
+mesh = SubResource("BoxMesh_xuqvo")
+
+[node name="ServiceSign" type="Label3D" parent="ParkingPads/ParkingPad_02" unique_id=851640147]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.7, 4.6)
+pixel_size = 0.008
+billboard = 1
+text = "SERVE HERE
+OPEN KITCHEN"
+font_size = 55
+
+[node name="WorldMeter" type="Node3D" parent="ParkingPads/ParkingPad_02" unique_id=179200732]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.2, 0)
+
+[node name="DisplayViewport" type="SubViewport" parent="ParkingPads/ParkingPad_02/WorldMeter" unique_id=504562207]
+disable_3d = true
+transparent_bg = true
+size = Vector2i(360, 70)
+render_target_update_mode = 4
+
+[node name="Backing" type="ColorRect" parent="ParkingPads/ParkingPad_02/WorldMeter/DisplayViewport" unique_id=1346331008]
+offset_right = 360.0
+offset_bottom = 70.0
+color = Color(0.02, 0.09, 0.07, 0.88)
+
+[node name="Time" type="Label" parent="ParkingPads/ParkingPad_02/WorldMeter/DisplayViewport" unique_id=1042199470]
+offset_left = 15.0
+offset_top = 4.0
+offset_right = 15.0
+offset_bottom = 4.0
+theme_override_font_sizes/font_size = 25
+text = "45s"
+
+[node name="Progress" type="ProgressBar" parent="ParkingPads/ParkingPad_02/WorldMeter/DisplayViewport" unique_id=757204066]
+offset_left = 15.0
+offset_top = 43.0
+offset_right = 345.0
+offset_bottom = 70.0
+theme_override_styles/fill = SubResource("StyleBoxFlat_0odxb")
+value = 100.0
+show_percentage = false
+metadata/green_fill = SubResource("StyleBoxFlat_0odxb")
+metadata/red_fill = SubResource("StyleBoxFlat_lswn8")
+
+[node name="WorldBar" type="Sprite3D" parent="ParkingPads/ParkingPad_02/WorldMeter" unique_id=34167363]
+pixel_size = 0.012
+billboard = 1
+no_depth_test = true
+
+[node name="ParkingPad_03" type="Area3D" parent="ParkingPads" unique_id=1782659368]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 64, 1.5, 10)
+collision_layer = 0
+script = ExtResource("5_1h3ss")
+
+[node name="ParkingZone" type="CollisionShape3D" parent="ParkingPads/ParkingPad_03" unique_id=1321403502]
+shape = SubResource("BoxShape3D_efxa6")
+
+[node name="ServiceSurface" type="MeshInstance3D" parent="ParkingPads/ParkingPad_03" unique_id=138744268]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -1.44, 0)
+material_override = SubResource("StandardMaterial3D_kq58d")
+mesh = SubResource("BoxMesh_seu75")
+
+[node name="ServiceSign" type="Label3D" parent="ParkingPads/ParkingPad_03" unique_id=1778732838]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.7, 4.6)
+pixel_size = 0.008
+billboard = 1
+text = "SERVE HERE
+OPEN KITCHEN"
+font_size = 55
+
+[node name="WorldMeter" type="Node3D" parent="ParkingPads/ParkingPad_03" unique_id=1402913529]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.2, 0)
+
+[node name="DisplayViewport" type="SubViewport" parent="ParkingPads/ParkingPad_03/WorldMeter" unique_id=104712356]
+disable_3d = true
+transparent_bg = true
+size = Vector2i(360, 70)
+render_target_update_mode = 4
+
+[node name="Backing" type="ColorRect" parent="ParkingPads/ParkingPad_03/WorldMeter/DisplayViewport" unique_id=1298183989]
+offset_right = 360.0
+offset_bottom = 70.0
+color = Color(0.02, 0.09, 0.07, 0.88)
+
+[node name="Time" type="Label" parent="ParkingPads/ParkingPad_03/WorldMeter/DisplayViewport" unique_id=1697271534]
+offset_left = 15.0
+offset_top = 4.0
+offset_right = 15.0
+offset_bottom = 4.0
+theme_override_font_sizes/font_size = 25
+text = "45s"
+
+[node name="Progress" type="ProgressBar" parent="ParkingPads/ParkingPad_03/WorldMeter/DisplayViewport" unique_id=475589280]
+offset_left = 15.0
+offset_top = 43.0
+offset_right = 345.0
+offset_bottom = 70.0
+theme_override_styles/fill = SubResource("StyleBoxFlat_a6jrf")
+value = 100.0
+show_percentage = false
+metadata/green_fill = SubResource("StyleBoxFlat_a6jrf")
+metadata/red_fill = SubResource("StyleBoxFlat_xuqvo")
+
+[node name="WorldBar" type="Sprite3D" parent="ParkingPads/ParkingPad_03/WorldMeter" unique_id=1831442006]
+pixel_size = 0.012
+billboard = 1
+no_depth_test = true
+
+[node name="ParkingPad_04" parent="ParkingPads" unique_id=1021986757 instance=ExtResource("6_npo8y")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 64, 1.5, 23)
+serving_enabled = false
+
+[node name="HUD" parent="." unique_id=1063619370 instance=ExtResource("8_548ar")]
+
+[node name="PatronSpawns" type="Node3D" parent="." unique_id=2017099011]
+
+[node name="PatronSpawn_01" type="Marker3D" parent="PatronSpawns" unique_id=491090797]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 54.5, 0.1, -6)
+script = ExtResource("10_1tvbx")
+sidewalk_min_z = -7.0
+sidewalk_max_z = 7.0
+
+[node name="PatronSpawn_02" type="Marker3D" parent="PatronSpawns" unique_id=232659567]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 54.5, 0.1, 0)
+script = ExtResource("10_1tvbx")
+sidewalk_min_z = -7.0
+sidewalk_max_z = 7.0
+
+[node name="PatronSpawn_03" type="Marker3D" parent="PatronSpawns" unique_id=764331554]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 54.5, 0.1, 6)
+script = ExtResource("10_1tvbx")
+sidewalk_min_z = -7.0
+sidewalk_max_z = 7.0
+
+[node name="Patrons" type="Node3D" parent="." unique_id=1861724499]
+
+[node name="PatronManager" type="Node" parent="." unique_id=921245525]
+script = ExtResource("11_kv1wi")
+patron_scene = ExtResource("12_sliiy")
+maximum_patrons = 36
+
+[node name="ProceduralCity" type="Node3D" parent="." unique_id=1117829694]
+script = ExtResource("13_qfj6i")
+terrain_size = 960.0
+terrain_step = 4.0
+hill_height = 28.0
+hill_diameter = 240.0
+building_model_paths = PackedStringArray("res://assets/kenney_city/commercial/building-a.glb", "res://assets/kenney_city/commercial/building-b.glb", "res://assets/kenney_city/commercial/building-c.glb", "res://assets/kenney_city/commercial/building-d.glb", "res://assets/kenney_city/commercial/building-e.glb", "res://assets/kenney_city/commercial/building-f.glb", "res://assets/kenney_city/commercial/building-g.glb", "res://assets/kenney_city/commercial/building-h.glb", "res://assets/kenney_city/commercial/building-i.glb", "res://assets/kenney_city/commercial/building-j.glb", "res://assets/kenney_city/commercial/building-k.glb", "res://assets/kenney_city/commercial/building-l.glb", "res://assets/kenney_city/commercial/building-m.glb", "res://assets/kenney_city/commercial/building-n.glb", "res://assets/kenney_city/commercial/building-skyscraper-a.glb", "res://assets/kenney_city/commercial/building-skyscraper-b.glb")
+
+[node name="Terrain" type="Node3D" parent="ProceduralCity" unique_id=1563979369]
+
+[node name="Roads" type="Node3D" parent="ProceduralCity" unique_id=767128765]
+
+[node name="ParkingSpaces" type="Node3D" parent="ProceduralCity"]
+
+[node name="ParkedCars" type="Node3D" parent="ProceduralCity"]
+
+[node name="HighwayApproaches" type="Node3D" parent="ProceduralCity"]
+
+[node name="Crosswalks" type="Node3D" parent="ProceduralCity"]
+
+[node name="StreetSigns" type="Node3D" parent="ProceduralCity"]
+
+[node name="Parks" type="Node3D" parent="ProceduralCity"]
+
+[node name="Traffic" type="Node3D" parent="ProceduralCity"]
+
+[node name="FogBoundary" type="Node3D" parent="ProceduralCity"]
+
+[node name="NearSkyline" type="Node3D" parent="ProceduralCity"]
+
+[node name="Buildings" type="Node3D" parent="ProceduralCity" unique_id=300932522]

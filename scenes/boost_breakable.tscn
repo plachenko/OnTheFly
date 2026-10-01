@@ -1,0 +1,25 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://boost_breakable.gd" id="1_7qe11"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_iju0x"]
+albedo_color = Color(0.7294118, 0.5019608, 0.27450982, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_q45xl"]
+material = SubResource("StandardMaterial3D_iju0x")
+size = Vector3(0.16, 0.16, 0.16)
+
+[node name="BoostBreakable" type="Node3D" unique_id=1090130369]
+script = ExtResource("1_7qe11")
+
+[node name="Debris" type="CPUParticles3D" parent="." unique_id=1180037107]
+emitting = false
+amount = 14
+lifetime = 0.8
+one_shot = true
+explosiveness = 1.0
+mesh = SubResource("BoxMesh_q45xl")
+spread = 55.0
+gravity = Vector3(0, -12, 0)
+initial_velocity_min = 3.0
+initial_velocity_max = 6.0

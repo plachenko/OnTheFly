@@ -1,0 +1,25 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/boost_breakable.tscn" id="1_yy25x"]
+[ext_resource type="Script" path="res://boost_breakable.gd" id="2_32stg"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_iju0x"]
+albedo_color = Color(0.7294118, 0.5019608, 0.27450982, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_pgq1f"]
+material = SubResource("StandardMaterial3D_iju0x")
+size = Vector3(1.4, 1.4, 1.4)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_mtuti"]
+size = Vector3(1.4, 1.4, 1.4)
+
+[node name="BreakableCrate" type="StaticBody3D" unique_id=807069819]
+
+[node name="Crate" type="MeshInstance3D" parent="." unique_id=880657262]
+mesh = SubResource("BoxMesh_pgq1f")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=614731830]
+shape = SubResource("BoxShape3D_mtuti")
+
+[node name="BoostBreakable" type="Node3D" parent="." unique_id=1090130369 instance=ExtResource("1_yy25x")]
+script = ExtResource("2_32stg")

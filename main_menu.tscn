@@ -1,0 +1,134 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://main_menu.gd" id="1_7vrkn"]
+[ext_resource type="PackedScene" path="res://main.tscn" id="2_fu7sn"]
+[ext_resource type="PackedScene" path="res://scenes/options_panel.tscn" id="2_glbon"]
+[ext_resource type="Script" path="res://game.gd" id="3_jix8l"]
+[ext_resource type="Script" path="res://food_menu_item.gd" id="5_nlkkf"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_nlkkf"]
+bg_color = Color(0.035, 0.09, 0.1, 0.94)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_h4533"]
+bg_color = Color(0.025, 0.065, 0.075, 0.98)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+
+[sub_resource type="Resource" id="Resource_ryguw"]
+script = ExtResource("5_nlkkf")
+
+[sub_resource type="Resource" id="Resource_d13ii"]
+script = ExtResource("5_nlkkf")
+food_name = "Burger"
+price = 10
+
+[sub_resource type="Resource" id="Resource_1u8w0"]
+script = ExtResource("5_nlkkf")
+food_name = "Drink"
+price = 3
+
+[node name="MainMenu" type="Node3D" unique_id=1564475822]
+script = ExtResource("1_7vrkn")
+
+[node name="MenuCamera" type="Camera3D" parent="." unique_id=252358315]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -15, 3.32, 18.2)
+current = true
+fov = 35.0
+size = 9.0
+
+[node name="Menu" type="CanvasLayer" parent="." unique_id=661880476]
+
+[node name="Title" type="Label" parent="Menu" unique_id=485233914]
+offset_left = 65.0
+offset_top = 65.0
+offset_right = 65.0
+offset_bottom = 65.0
+theme_override_font_sizes/font_size = 48
+text = "STREET KITCHEN"
+
+[node name="Tagline" type="Label" parent="Menu" unique_id=1126918559]
+modulate = Color(0.6, 0.8980392, 0.8352941, 1)
+offset_left = 68.0
+offset_top = 125.0
+offset_right = 68.0
+offset_bottom = 125.0
+theme_override_font_sizes/font_size = 18
+text = "DRIVE. SERVE. MAKE IT COUNT."
+
+[node name="Actions" type="Panel" parent="Menu" unique_id=1464717562]
+offset_left = 875.0
+offset_top = 235.0
+offset_right = 1210.0
+offset_bottom = 675.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_nlkkf")
+
+[node name="Heading" type="Label" parent="Menu/Actions" unique_id=1849095537]
+layout_mode = 0
+offset_left = 26.0
+offset_top = 26.0
+offset_right = 26.0
+offset_bottom = 26.0
+theme_override_font_sizes/font_size = 21
+text = "LET'S GET COOKING"
+
+[node name="NewGame" type="Button" parent="Menu/Actions" unique_id=297653965]
+layout_mode = 0
+offset_left = 25.0
+offset_top = 87.0
+offset_right = 310.0
+offset_bottom = 147.0
+theme_override_font_sizes/font_size = 22
+text = "New game"
+
+[node name="Options" type="Button" parent="Menu/Actions" unique_id=647325145]
+layout_mode = 0
+offset_left = 25.0
+offset_top = 247.0
+offset_right = 310.0
+offset_bottom = 307.0
+theme_override_font_sizes/font_size = 22
+text = "Options"
+
+[node name="ProceduralCity" type="Button" parent="Menu/Actions"]
+layout_mode = 0
+offset_left = 25.0
+offset_top = 167.0
+offset_right = 310.0
+offset_bottom = 227.0
+theme_override_font_sizes/font_size = 22
+text = "Hilly city"
+
+[node name="Quit" type="Button" parent="Menu/Actions" unique_id=2111775533]
+layout_mode = 0
+offset_left = 25.0
+offset_top = 327.0
+offset_right = 310.0
+offset_bottom = 387.0
+theme_override_font_sizes/font_size = 22
+text = "Quit"
+
+[node name="Footer" type="Label" parent="Menu" unique_id=1972630659]
+offset_left = 65.0
+offset_top = 740.0
+offset_right = 65.0
+offset_bottom = 740.0
+theme_override_font_sizes/font_size = 17
+text = "D-pad / arrows to select    •    A / Enter to confirm"
+
+[node name="OptionsPanel" type="Panel" parent="Menu" unique_id=1543347601 instance=ExtResource("2_glbon")]
+visible = false
+offset_left = 200.0
+offset_top = 125.0
+offset_right = 1080.0
+offset_bottom = 675.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_h4533")
+
+[node name="Level" type="Node3D" parent="." unique_id=1285822432 instance=ExtResource("2_fu7sn")]
+script = ExtResource("3_jix8l")
+food_menu = Array[Resource]([SubResource("Resource_ryguw"), SubResource("Resource_d13ii"), SubResource("Resource_1u8w0")])

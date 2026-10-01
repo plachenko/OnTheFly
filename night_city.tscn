@@ -1,0 +1,8 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="PackedScene" path="res://procedural_city.tscn" id="1_city"]
+
+[node name="ProceduralCityLevel" instance=ExtResource("1_city")]
+
+[node name="ProceduralCity" parent="." index="-1"]
+time_of_day_mode = 2

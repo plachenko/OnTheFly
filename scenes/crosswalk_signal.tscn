@@ -1,0 +1,50 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://crosswalk_signal.gd" id="1_signal"]
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_pole"]
+top_radius = 0.08
+bottom_radius = 0.08
+height = 2.5
+
+[sub_resource type="BoxMesh" id="BoxMesh_signal"]
+size = Vector3(0.55, 0.65, 0.3)
+
+[node name="CrosswalkSignal" type="Node3D"]
+script = ExtResource("1_signal")
+
+[node name="SouthSignal" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.25, 0, -5.5)
+
+[node name="Pole" type="MeshInstance3D" parent="SouthSignal"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.25, 0)
+mesh = SubResource("CylinderMesh_pole")
+
+[node name="Housing" type="MeshInstance3D" parent="SouthSignal"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.35, 0)
+mesh = SubResource("BoxMesh_signal")
+
+[node name="Status" type="Label3D" parent="SouthSignal"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.35, 0.18)
+pixel_size = 0.005
+billboard = 1
+text = "WAIT"
+font_size = 42
+
+[node name="NorthSignal" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.25, 0, 5.5)
+
+[node name="Pole" type="MeshInstance3D" parent="NorthSignal"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.25, 0)
+mesh = SubResource("CylinderMesh_pole")
+
+[node name="Housing" type="MeshInstance3D" parent="NorthSignal"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.35, 0)
+mesh = SubResource("BoxMesh_signal")
+
+[node name="Status" type="Label3D" parent="NorthSignal"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.35, 0.18)
+pixel_size = 0.005
+billboard = 1
+text = "WAIT"
+font_size = 42
