@@ -27,6 +27,11 @@ extends Node3D
 @export_range(0.6, 1.0, 0.05) var multi_crosswalk_fraction: float = 0.9
 @export_range(0, 260, 1) var building_count: int = 190
 @export_range(0, 40, 1) var edge_building_count: int = 26
+@export_category("Sparse Block Fences")
+@export var sparse_block_fences_enabled: bool = true
+@export_range(0, 9, 1) var fence_max_block_buildings: int = 5
+@export_range(0.6, 2.0, 0.1) var fence_height: float = 1.2
+@export_category("City")
 @export_range(5.0, 12.0, 0.5) var building_scale: float = 8.0
 @export_range(0.0, 1.0, 0.05) var foundation_overhang: float = 0.4
 @export_range(0.02, 0.3, 0.01) var foundation_clearance: float = 0.08
@@ -37,8 +42,8 @@ extends Node3D
 @export var crosswalk_scene: PackedScene = preload("res://scenes/crosswalk_signal.tscn")
 @export var traffic_light_model: PackedScene = preload("res://assets/kenney_city/street_furniture/traffic-light.glb")
 @export var streetlight_model: PackedScene = preload("res://assets/kenney_city/street_furniture/light-curved.glb")
-@export_range(3.0, 10.0, 0.5) var traffic_light_scale: float = 6.0
-@export_range(3.0, 10.0, 0.5) var streetlight_scale: float = 7.0
+@export_range(3.0, 10.0, 0.5) var traffic_light_scale: float = 7.2
+@export_range(3.0, 12.0, 0.5) var streetlight_scale: float = 9.0
 @export_category("Traffic Cars")
 @export_range(0, 80, 1) var traffic_car_count: int = 22
 @export_range(3.0, 16.0, 0.5) var traffic_speed: float = 8.0
@@ -161,10 +166,13 @@ func generate() -> void:
 	make_highway_approaches()
 	make_crosswalks()
 	make_stop_signs()
+	make_streetlights()
 	make_parks()
 	make_buildings()
 	make_near_skyline()
 	make_street_parking()
+	make_curb_markings()
+	make_sparse_block_fences()
 	make_traffic()
 	make_fog_boundary()
 	align_playable_objects()
@@ -452,10 +460,50 @@ func make_road_decals(vertical_streets: Array[int], horizontal_streets: Array[in
 				add_terrain_patch($Roads, "StopLine_Eastbound", 0.42, 7.2, 0.18, stop_paint, Vector2(x - line_distance, z + 4.0), 0.5, true)
 				add_terrain_patch($Roads, "StopLine_Westbound", 0.42, 7.2, 0.18, stop_paint, Vector2(x + line_distance, z - 4.0), 0.5, true)
 		for z in [-112, -48, 16, 80, 144]:
-			add_sewer_grate(Vector2(x - 6.7, z), true, grate_metal, grate_slots)
+			add_sewer_grate(Vector2(x - (road_width * 0.5 - 0.7), z), true, grate_metal, grate_slots)
 	for z in horizontal_streets:
 		for x in [-96, -32, 32, 96]:
-			add_sewer_grate(Vector2(x, z + 6.7), false, grate_metal, grate_slots)
+			add_sewer_grate(Vector2(x, z + (road_width * 0.5 - 0.7)), false, grate_metal, grate_slots)
+
+func make_curb_markings() -> void:
+	var white := StandardMaterial3D.new()
+	white.albedo_color = Color(0.96, 0.96, 0.9)
+	white.roughness = 0.9
+	var red := StandardMaterial3D.new()
+	red.albedo_color = Color(0.85, 0.055, 0.045)
+	red.roughness = 0.9
+	var markings := Node3D.new()
+	markings.name = "CurbMarkings"
+	$Roads.add_child(markings)
+	var curb_offset := road_width * 0.5 - 0.2
+	for road_x in range(-128, 129, 64):
+		for block_z in [-112.0, -48.0, 16.0, 80.0, 144.0]:
+			for side in [-1.0, 1.0]:
+				for along in [-18.0, -12.0, -6.0, 0.0, 6.0, 12.0, 18.0]:
+					var at := Vector2(road_x + side * curb_offset, block_z + along)
+					var restricted := absf(along) >= 18.0 or (roundi(block_z) + road_x + roundi(side)) % 5 == 0
+					add_curb_marking(markings, at, true, restricted, white, red)
+	for road_z in range(-144, 177, 64):
+		for block_x in [-96.0, -32.0, 32.0, 96.0]:
+			for side in [-1.0, 1.0]:
+				for along in [-18.0, -12.0, -6.0, 0.0, 6.0, 12.0, 18.0]:
+					var at := Vector2(block_x + along, road_z + side * curb_offset)
+					var restricted := absf(along) >= 18.0 or (roundi(block_x) + road_z + roundi(side)) % 5 == 0
+					add_curb_marking(markings, at, false, restricted, white, red)
+
+func add_curb_marking(parent: Node3D, at: Vector2, vertical: bool, restricted: bool, white: Material, red: Material) -> void:
+	# A designated parking/serving bay always retains a white curb.
+	if restricted:
+		for bay in $ParkingSpaces.get_children():
+			var delta := at - Vector2(bay.position.x, bay.position.z)
+			if absf(delta.x) < (3.0 if vertical else 6.5) and absf(delta.y) < (6.5 if vertical else 3.0):
+				restricted = false
+				break
+		for pad in get_parent().get_node("ParkingPads").get_children():
+			if at.distance_to(Vector2(pad.position.x, pad.position.z)) < 10.0:
+				restricted = false
+	var color := red if restricted else white
+	add_terrain_patch(parent, "NoParkingRed" if restricted else "WhiteCurbLine", 0.28 if vertical else 5.7, 5.7 if vertical else 0.28, 0.19, color, at, 0.5, true)
 
 func add_sewer_grate(center: Vector2, vertical: bool, metal: Material, slots: Material) -> void:
 	add_terrain_patch($Roads, "SewerGrate", 1.15 if vertical else 1.7, 1.7 if vertical else 1.15, 0.17, metal, center, 0.3, true)
@@ -746,7 +794,7 @@ func make_crosswalks() -> void:
 				if traffic_light_model:
 					post.get_node("Pole").hide()
 					post.get_node("Housing").hide()
-					post.get_node("Status").position.y = 3.35
+					post.get_node("Status").position.y = 3.35 * traffic_light_scale / 6.0
 					var traffic_light := traffic_light_model.instantiate() as Node3D
 					traffic_light.name = "KenneyTrafficLight"
 					traffic_light.scale = Vector3.ONE * traffic_light_scale
@@ -763,7 +811,7 @@ func make_crosswalks() -> void:
 				var lamp_z: float = intersection_z + (road_width + sidewalk_width) * 0.5
 				streetlight.position = Vector3(lamp_x - crossing.position.x,height_at(lamp_x,lamp_z)+0.1,lamp_z - crossing.position.z)
 				streetlight.scale = Vector3.ONE * streetlight_scale
-				streetlight.rotation.y = PI
+				streetlight.rotation.y = 0.0
 				apply_kit_material(streetlight,road_material)
 				crossing.add_child(streetlight)
 				var glow := OmniLight3D.new()
@@ -798,7 +846,7 @@ func make_perpendicular_crosswalk(intersection_x: float, intersection_z: float, 
 		if traffic_light_model:
 			post.get_node("Pole").hide()
 			post.get_node("Housing").hide()
-			post.get_node("Status").position.y = 3.35
+			post.get_node("Status").position.y = 3.35 * traffic_light_scale / 6.0
 			var traffic_light := traffic_light_model.instantiate() as Node3D
 			traffic_light.name = "KenneyTrafficLight"
 			traffic_light.scale = Vector3.ONE * traffic_light_scale
@@ -810,6 +858,42 @@ func make_perpendicular_crosswalk(intersection_x: float, intersection_z: float, 
 	for stripe in range(15):
 		var offset_x := float(stripe - 7)
 		add_terrain_patch(crossing, "Stripe_%d" % stripe, 0.5, 3.6, 0.20, paint, Vector2(offset_x, 0.0), 0.25, true)
+
+func make_streetlights() -> void:
+	if not streetlight_model:
+		return
+	var curb_offset := (road_width + sidewalk_width) * 0.5
+	# Two poles on each side of every block-length street segment.
+	for road_x in range(-128, 129, 64):
+		for block_z in [-112.0, -48.0, 16.0, 80.0, 144.0]:
+			for along in [-12.0, 12.0]:
+				for side in [-1.0, 1.0]:
+					add_streetlight(Vector2(road_x + side * curb_offset, block_z + along), -side * PI * 0.5)
+	for road_z in range(-144, 177, 64):
+		for block_x in [-96.0, -32.0, 32.0, 96.0]:
+			for along in [-12.0, 12.0]:
+				for side in [-1.0, 1.0]:
+					add_streetlight(Vector2(block_x + along, road_z + side * curb_offset), 0.0 if side > 0.0 else PI)
+
+func add_streetlight(at: Vector2, yaw: float) -> void:
+	for pad in get_parent().get_node("ParkingPads").get_children():
+		if Vector2(pad.position.x, pad.position.z).distance_to(at) < 6.0:
+			return
+	var lamp := streetlight_model.instantiate() as Node3D
+	lamp.name = "StreetLight"
+	lamp.position = Vector3(at.x, height_at(at.x, at.y) + 0.1, at.y)
+	lamp.scale = Vector3.ONE * streetlight_scale
+	lamp.rotation.y = yaw
+	apply_kit_material(lamp, road_material)
+	$StreetSigns.add_child(lamp)
+	var glow := OmniLight3D.new()
+	glow.name = "WarmStreetGlow"
+	glow.position.y = 0.56
+	glow.light_color = Color("ffe8b1")
+	glow.light_energy = 0.45
+	glow.omni_range = 10.0
+	glow.shadow_enabled = false
+	lamp.add_child(glow)
 
 func make_stop_signs() -> void:
 	var red := StandardMaterial3D.new()
@@ -867,7 +951,9 @@ func make_stop_signs() -> void:
 func make_traffic_bulb(post: Node3D, label: String, color: Color, height: float) -> void:
 	var bulb := MeshInstance3D.new()
 	bulb.name = label
-	bulb.position = Vector3(0.0,height,-0.32)
+	var scale_ratio := traffic_light_scale / 6.0
+	bulb.position = Vector3(0.0,height,-0.32) * scale_ratio
+	bulb.scale = Vector3.ONE * scale_ratio
 	var sphere := SphereMesh.new()
 	sphere.radius = 0.12
 	sphere.height = 0.24
@@ -1224,6 +1310,83 @@ func make_buildings() -> void:
 		collision.position.y = shape.size.y * 0.5
 		body.add_child(collision)
 
+func make_sparse_block_fences() -> void:
+	# Keep fences in the existing cleared Buildings container on regeneration.
+	if not sparse_block_fences_enabled:
+		return
+	var buildings := $Buildings.get_children()
+	var fences := Node3D.new()
+	fences.name = "SparseBlockFences"
+	$Buildings.add_child(fences)
+	var wood := StandardMaterial3D.new()
+	wood.albedo_color = Color(0.39, 0.27, 0.17)
+	wood.roughness = 0.9
+	var inset := 32.0 - road_width * 0.5 - sidewalk_width - 1.5
+	for bx in range(-160, 161, 64):
+		for bz in range(-176, 145, 64):
+			if Vector2i(bx, bz) in park_block_centers:
+				continue
+			var occupancy := 0
+			for building in buildings:
+				if absf(building.position.x - bx) < 32.0 and absf(building.position.z - bz) < 32.0:
+					occupancy += 1
+			if occupancy > fence_max_block_buildings:
+				continue
+			for side in [-1.0, 1.0]:
+				for vertical in [false, true]:
+					# Open corners and a central gate keep footpaths and lot access clear.
+					for along in [-15.0, -9.0, 9.0, 15.0]:
+						var center := Vector2(bx + side * inset, bz + along) if vertical else Vector2(bx + along, bz + side * inset)
+						var half_size := Vector2(0.3, 3.0) if vertical else Vector2(3.0, 0.3)
+						if not fence_segment_clear(center, half_size, buildings):
+							continue
+						var direction := Vector2(0, 1) if vertical else Vector2(1, 0)
+						var a := center - direction * 3.0
+						var b := center + direction * 3.0
+						var start := Vector3(a.x, terrain_surface_height_at(a.x, a.y), a.y)
+						var finish := Vector3(b.x, terrain_surface_height_at(b.x, b.y), b.y)
+						for point in [start, finish]:
+							add_fence_piece(fences, point + Vector3.UP * fence_height * 0.5, Vector3(0.16, fence_height, 0.16), wood)
+						for fraction in [0.35, 0.8]:
+							var rail := add_fence_piece(fences, (start + finish) * 0.5 + Vector3.UP * fence_height * fraction, Vector3(start.distance_to(finish), 0.12, 0.1), wood)
+							var axis := (finish - start).normalized()
+							var normal := axis.cross(Vector3.UP).normalized()
+							rail.basis = Basis(axis, normal.cross(axis), normal)
+
+func fence_segment_clear(center: Vector2, half_size: Vector2, buildings: Array[Node]) -> bool:
+	# Stay inside the fog wrap and off building foundations/stairs and serving pads.
+	if absf(center.x) + half_size.x > wrap_edge - 3.0 or absf(center.y) + half_size.y > wrap_edge - 3.0:
+		return false
+	for building in buildings:
+		var collision := building.get_node_or_null("BuildingCollision") as CollisionShape3D
+		if not collision or not collision.shape is BoxShape3D:
+			continue
+		var radius: float = maxf(collision.shape.size.x, collision.shape.size.z) * 0.6 + 3.0
+		if absf(center.x - building.position.x) < half_size.x + radius and absf(center.y - building.position.z) < half_size.y + radius:
+			return false
+	for pad in get_parent().get_node("ParkingPads").get_children():
+		if Vector2(pad.position.x, pad.position.z).distance_to(center) < 14.0:
+			return false
+	return building_clears_street_fixtures(Vector3(center.x, 0, center.y), 3.0)
+
+func add_fence_piece(parent: Node3D, center: Vector3, size: Vector3, material: Material) -> StaticBody3D:
+	var body := StaticBody3D.new()
+	body.name = "FencePiece"
+	body.position = center
+	parent.add_child(body)
+	var mesh := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = size
+	box.material = material
+	mesh.mesh = box
+	body.add_child(mesh)
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = size
+	collision.shape = shape
+	body.add_child(collision)
+	return body
+
 func building_outward_rotation(model_path: String, lot: Vector2i) -> float:
 	var entry: Variant = building_outward_faces.get(model_path.get_file(), {})
 	if not entry is Dictionary:
@@ -1248,6 +1411,9 @@ func building_exterior_direction(lot: Vector2i) -> Vector2:
 
 func building_clears_street_fixtures(position: Vector3, half_width: float) -> bool:
 	var keepout := half_width + street_fixture_clearance
+	for fixture in $StreetSigns.get_children():
+		if fixture.name.begins_with("StreetLight") and absf(position.x - fixture.position.x) < keepout and absf(position.z - fixture.position.z) < keepout:
+			return false
 	for crossing in $Crosswalks.get_children():
 		for signal_name in ["SouthSignal", "NorthSignal"]:
 			var post_node: Node3D = crossing.get_node(signal_name)

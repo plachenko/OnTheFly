@@ -306,6 +306,14 @@ offset_bottom = 453.0
 theme_override_font_sizes/font_size = 14
 text = "D-pad / arrows select • A / Enter buy • Drive away to close"
 
+[node name="Ingredients" type="Button" parent="Layout/RepairPanel"]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 378.0
+offset_right = 556.0
+offset_bottom = 418.0
+text = "Restock ingredients"
+
 [node name="RepairsTab" type="Button" parent="Layout/RepairPanel" unique_id=821356233]
 layout_mode = 0
 offset_left = 24.0

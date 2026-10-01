@@ -63,6 +63,11 @@ func make_order(patron: Node) -> Dictionary:
     var total=0
     var items: Array[String] = []
     var quantity=clampi(ceili(patron.interest*maximum_order_items),1,maximum_order_items)
+    var available_portions: int = level.ingredients
+    for waiting in level.get_node("Patrons").get_children():
+        if not waiting.order.is_empty():
+            available_portions -= int(waiting.order.get("quantity", 0))
+    quantity = mini(quantity, maxi(0, available_portions))
     for i in quantity:
         var affordable: Array = []
         for food in level.food_menu:
@@ -79,6 +84,8 @@ func complete_order(patron: Node) -> bool:
     if patron.order.is_empty() or patron.order.total<=0 or patron.order.total>patron.budget:return false
     if patron.service_elapsed<patron.order.quantity*seconds_per_item:return false
     if patron.global_position.distance_to(patron.queue_target())>1.1:return false
+    if patron.order.quantity > level.ingredients:return false
+    level.ingredients -= patron.order.quantity
     var total: int=patron.order.total
     level.money+=total
     level.money_earned+=total

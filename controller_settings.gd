@@ -37,6 +37,7 @@ func _ready() -> void:
 	$Layout/RepairPanel/FullFix.pressed.connect(func(): get_parent().buy_repair(0))
 	$Layout/RepairPanel/GoodFix.pressed.connect(func(): get_parent().buy_repair(1))
 	$Layout/RepairPanel/MidFix.pressed.connect(func(): get_parent().buy_repair(2))
+	$Layout/RepairPanel/Ingredients.pressed.connect(func(): get_parent().buy_ingredients())
 	$Layout/RoundEndPanel/Restart.pressed.connect(restart_round)
 	$Layout/RoundEndPanel/MainMenu.pressed.connect(func(): get_node("/root/GameOptions").round_balance=get_parent().money; get_tree().paused=false; get_tree().change_scene_to_file("res://main_menu.tscn"))
 	$Layout/RoundEndPanel/Quit.pressed.connect(func(): get_tree().quit())
@@ -141,12 +142,13 @@ func _process(_delta: float) -> void:
 	if is_instance_valid(truck.parking_pad) and truck.parking_pad!=level.repair_pad:
 		pad_status="PAD CLOSED — find another green pad" if truck.parking_pad.expired else ("SERVING %d/%d • %ds left"%[truck.parking_pad.patrons.size(),truck.parking_pad.patron_capacity,ceili(truck.parking_pad.service_remaining)] if serving_pad else "GREEN PAD — open kitchen to serve")
 	var menu_items: Array[String]=[]
+	if not level.has_ingredients():pad_status="NEED INGREDIENTS — restock at service station"
 	for food in level.food_menu:menu_items.append("%s $%d"%[food.food_name,food.price])
 	$Layout/PatronPanel/Info.text="PATRONS %d / %d   •   FED %d\n%s\n%s\n%s"%[level.get_node("Patrons").get_child_count(),patron_manager.maximum_patrons,patron_manager.served_orders," / ".join(menu_items),pad_status,patron_manager.last_sale]
 	var seconds = ceili(level.remaining_time)
 	$Layout/SessionPanel/TimeLabel.text="TIME %d:%02d"%[seconds/60,seconds%60]
 	$Layout/SessionPanel/MoneyLabel.text="MONEY $%d"%level.money
-	$Layout/SessionPanel/GoalLabel.text="EARNED $%d / $%d — Open kitchen on a serving pad"%[level.money_earned,level.earnings_target]
+	$Layout/SessionPanel/GoalLabel.text="EARNED $%d / $%d • INGREDIENTS %d"%[level.money_earned,level.earnings_target,level.ingredients]
 	$Layout/SessionPanel/LuckLabel.text="Carried from last round" if level.carried_balance else "Starting luck %s$%d"%["+" if level.starting_luck>=0 else "-",absi(level.starting_luck)]
 	var show_repair = level.can_repair() and not panel.visible and not $Layout/PausePanel.visible
 	var just_arrived = show_repair and not $Layout/RepairPanel.visible
@@ -159,6 +161,10 @@ func _process(_delta: float) -> void:
 	$Layout/RepairPanel/MidFix.visible=not upgrade_tab
 	$Layout/RepairPanel/Hint.visible=not upgrade_tab
 	$Layout/RepairPanel/TimeHint.visible=not upgrade_tab
+	var ingredient_quote = level.ingredient_quote()
+	$Layout/RepairPanel/Ingredients.visible = not upgrade_tab
+	$Layout/RepairPanel/Ingredients.text = "Ingredients +%d — $%d  (Stock %d/%d)" % [ingredient_quote.amount, ingredient_quote.price, level.ingredients, level.ingredient_capacity]
+	$Layout/RepairPanel/Ingredients.disabled = ingredient_quote.amount <= 0 or ingredient_quote.price > level.money
 	$Layout/BoostPanel/BoostMeter.value=truck.boost_fuel/truck.boost_capacity*100.0
 	$Layout/BoostPanel/BoostLabel.text="BOOST %d%% — HOLD RB / SHIFT"%roundi(truck.boost_fuel/truck.boost_capacity*100.0) if truck.booster_owned else "BOOST — BUY BOOSTER + CANISTERS"
 	var upgrades=[$Layout/RepairPanel/UpgradeList/Booster,$Layout/RepairPanel/UpgradeList/Canister,$Layout/RepairPanel/UpgradeList/Drifting,$Layout/RepairPanel/UpgradeList/LiftKit,$Layout/RepairPanel/UpgradeList/Armor,$Layout/RepairPanel/UpgradeList/FullSelfDriving]

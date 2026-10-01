@@ -4,6 +4,8 @@ extends RigidBody3D
 @export_category("Kenney Car")
 @export var model_scene: PackedScene
 @export_range(1.0, 3.0, 0.1) var car_scale: float = 1.8
+@export_range(0.05, 0.5, 0.05) var collision_padding: float = 0.2
+var collision_center: Vector3 = Vector3(0, 0.75, 0)
 @export_category("Traffic Route")
 @export var travel_axis: Vector3 = Vector3.FORWARD
 @export var lane_center: Vector3 = Vector3.ZERO
@@ -14,10 +16,12 @@ extends RigidBody3D
 @export_range(0.0, 1.0, 0.05) var intersection_turn_chance: float = 0.28
 @export var parked: bool = false
 @export_category("Truck Interaction")
-@export_range(4.0, 20.0, 0.5) var yield_distance: float = 11.0
 @export_range(0.0, 12.0, 0.5) var disabling_impact_speed: float = 0.5
 @export_range(300.0, 4000.0, 50.0) var disabled_mass: float = 950.0
 @export_range(0.1, 1.0, 0.05) var truck_push_speed_ratio: float = 0.6
+@export_range(0.5, 12.0, 0.5) var chain_impact_min_speed: float = 2.5
+var incoming_velocity: Vector3 = Vector3.ZERO
+var pending_chain_hits: Dictionary = {}
 @export_category("Impact Springs")
 @export_range(10.0, 100.0, 1.0) var spring_stiffness: float = 42.0
 @export_range(1.0, 20.0, 0.5) var spring_damping: float = 3.0
@@ -27,8 +31,12 @@ extends RigidBody3D
 @export_range(0.05, 0.5, 0.01) var maximum_crumple: float = 0.32
 @export_range(0.01, 0.1, 0.01) var crumple_per_speed: float = 0.04
 @export_category("Disabled Car Cleanup")
-@export_range(1.0, 60.0, 0.5) var fade_delay: float = 12.0
-@export_range(0.5, 10.0, 0.5) var fade_duration: float = 3.0
+@export_range(1.0, 60.0, 0.5) var fade_delay: float = 4.0
+@export_range(0.5, 10.0, 0.5) var fade_duration: float = 0.8
+@export var explosion_delay: float = 4.0
+var exploded: bool = false
+var bounce_cooldown: float = 0.0
+var warning_material: StandardMaterial3D
 @export_range(0.5, 15.0, 0.5) var smoke_duration: float = 6.0
 var city: Node3D
 var truck: CharacterBody3D
@@ -59,12 +67,14 @@ func _ready() -> void:
 	city = get_parent().get_parent() as Node3D
 	truck = city.get_parent().get_node_or_null("FoodTruck") as CharacterBody3D
 	mass = disabled_mass
+	max_contacts_reported = 16
 	if model_scene and $Visual.get_child_count() == 0:
 		var model := model_scene.instantiate() as Node3D
 		model.name = "KenneyCar"
 		model.scale = Vector3.ONE * car_scale
 		$Visual.add_child(model)
 	spring_skeleton = find_spring_skeleton($Visual)
+	fit_collision_to_model()
 	if Engine.is_editor_hint():
 		return
 	$VehicleLights.attach_to_chassis(spring_skeleton)
@@ -85,18 +95,33 @@ func _ready() -> void:
 	if parked:
 		$VehicleLights.headlights_enabled = false
 	configure_impact_smoke()
+	warning_material = StandardMaterial3D.new()
+	warning_material.albedo_color = Color(1.0, 0.02, 0.01, 0.65)
+	warning_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	warning_material.emission_enabled = true
+	warning_material.emission = Color.RED
+	warning_material.emission_energy_multiplier = 2.0
 	update_car_pose(0.0)
 
 func _physics_process(delta: float) -> void:
+	if disabled and not exploded:
+		incoming_velocity = linear_velocity
 	update_impact_springs(delta)
 	if disabled:
 		$VehicleLights.sync_with_chassis()
 	if disabled:
 		disabled_elapsed += delta
+		bounce_cooldown = maxf(0.0, bounce_cooldown - delta)
+		if not exploded:
+			var interval := lerpf(0.35, 0.08, clampf(disabled_elapsed / explosion_delay, 0.0, 1.0))
+			for mesh in $Visual.find_children("*", "MeshInstance3D", true, false):
+				mesh.material_overlay = warning_material if fmod(disabled_elapsed, interval * 2.0) < interval else null
+			if disabled_elapsed >= explosion_delay:
+				explode()
 		$ImpactSmoke.emitting = disabled_elapsed < smoke_duration
 		$VehicleLights.set_driving_lights(false, false, false, false, true)
-		if disabled_elapsed > fade_delay:
-			var fade_amount := clampf((disabled_elapsed - fade_delay) / fade_duration,0.0,1.0)
+		if exploded and disabled_elapsed > maxf(fade_delay, explosion_delay):
+			var fade_amount := clampf((disabled_elapsed - maxf(fade_delay, explosion_delay)) / fade_duration,0.0,1.0)
 			fade_visuals($Visual,fade_amount)
 			if fade_amount >= 1.0:
 				queue_free()
@@ -105,7 +130,8 @@ func _physics_process(delta: float) -> void:
 	if parked:
 		$VehicleLights.set_driving_lights(false, false, false, false, false)
 		return
-	var stopped := should_wait_for_walk_light() or should_yield_to_truck() or should_follow_car()
+	# Keep advancing around the truck; actual impacts use the existing disabled-car physics.
+	var stopped := should_wait_for_walk_light() or should_follow_car()
 	if not stopped:
 		if turning:
 			advance_turn(delta)
@@ -119,6 +145,35 @@ func _physics_process(delta: float) -> void:
 				considered_intersections.clear()
 	$VehicleLights.set_driving_lights(stopped, false, turn_intent < 0, turn_intent > 0, false)
 	update_car_pose(delta)
+
+func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
+	if not disabled or exploded:
+		return
+	for index in state.get_contact_count():
+		var other := state.get_contact_collider_object(index)
+		if not is_instance_valid(other) or not other.has_method("receive_car_impact") or other.disabled:
+			continue
+		var normal := (state.transform.basis * state.get_contact_local_normal(index)).normalized()
+		var other_velocity := state.get_contact_collider_velocity_at_position(index)
+		# Preserve the approach velocity even when the solver has already bounced us.
+		var approach := maxf(0.0, -(incoming_velocity - other_velocity).dot(normal))
+		approach = maxf(approach, maxf(0.0, -(state.linear_velocity - other_velocity).dot(normal)))
+		if approach < chain_impact_min_speed or pending_chain_hits.has(other.get_instance_id()):
+			continue
+		pending_chain_hits[other.get_instance_id()] = true
+		# Release frozen traffic bodies outside the physics contact callback.
+		apply_chain_hit.call_deferred(other, approach, -normal, state.get_contact_collider_position(index))
+
+func apply_chain_hit(other: Object, approach: float, direction: Vector3, point: Vector3) -> void:
+	if not is_instance_valid(other):
+		return
+	pending_chain_hits.erase(other.get_instance_id())
+	other.receive_car_impact(approach, direction, point)
+
+func receive_car_impact(approach: float, direction: Vector3, point: Vector3) -> bool:
+	if disabled or exploded or approach < chain_impact_min_speed:
+		return false
+	return disable_from_impact(approach, direction, point)
 
 func set_police_lights_enabled(enabled: bool) -> void:
 	$VehicleLights.set_police_enabled(enabled)
@@ -176,22 +231,6 @@ func turn_curve(t: float) -> Vector3:
 	var inv := 1.0 - t
 	return turn_start * (inv * inv * inv) + turn_control_a * (3.0 * inv * inv * t) + turn_control_b * (3.0 * inv * t * t) + turn_end * (t * t * t)
 
-func should_yield_to_truck() -> bool:
-	if not is_instance_valid(truck):
-		return false
-	var relative: Vector3 = truck.global_position-global_position
-	var ahead: float = relative.dot(travel_axis)
-	var sideways: float = (relative-travel_axis*ahead).length()
-	if ahead > -2.0 and ahead < yield_distance and sideways < 5.5:
-		return true
-	var truck_motion: Vector3 = Vector3(truck.velocity.x,0.0,truck.velocity.z)
-	var closing_motion: Vector3 = travel_axis*driving_speed-truck_motion
-	var closing_speed_sq: float = closing_motion.length_squared()
-	if closing_speed_sq < 0.01:
-		return false
-	var closest_time: float = clampf(relative.dot(closing_motion)/closing_speed_sq,0.0,1.5)
-	return closest_time > 0.0 and (relative-closing_motion*closest_time).length() < 5.5
-
 func should_follow_car() -> bool:
 	if turning:
 		return false
@@ -213,22 +252,29 @@ func disable_from_impact(approach_speed: float, push_direction: Vector3, _impact
 	turning = false
 	turn_intent = 0
 	$VehicleLights.set_driving_lights(false, false, false, false, true)
-	# Keep the collision body upright so the truck pushes it across the road.
+	# Release the wreck into a deliberately exaggerated airborne tumble.
 	rotation.x = 0.0
 	rotation.z = 0.0
 	$Visual.rotation.x = 0.0
 	$Visual.rotation.z = 0.0
+	$CarCollision.transform = Transform3D(Basis.IDENTITY, collision_center)
 	snap_collision_to_ground()
-	axis_lock_angular_x = true
-	axis_lock_angular_y = true
-	axis_lock_angular_z = true
+	axis_lock_angular_x = false
+	axis_lock_angular_y = false
+	axis_lock_angular_z = false
+	linear_damp = 0.18
+	angular_damp = 0.12
+	physics_material_override = PhysicsMaterial.new()
+	physics_material_override.bounce = 0.55
 	freeze = false
 	linear_velocity = Vector3.ZERO
 	angular_velocity = Vector3.ZERO
 	sleeping = false
 	$ImpactSmoke.emitting = true
 	var horizontal_push := Vector3(push_direction.x,0.0,push_direction.z).normalized()
-	apply_central_impulse(horizontal_push * minf(approach_speed * disabled_mass * 0.3, disabled_mass * 8.0))
+	linear_velocity = horizontal_push * clampf(approach_speed * 1.1, 7.0, 28.0) + Vector3.UP * clampf(approach_speed * 0.45, 5.5, 12.0)
+	randomize_tumble()
+	incoming_velocity = linear_velocity
 	excite_impact_springs(approach_speed,horizontal_push)
 	apply_crumple(approach_speed,horizontal_push)
 	return true
@@ -244,20 +290,70 @@ func push_from_truck(push_direction: Vector3, truck_speed: float, _impact_point:
 	var speed_gain := maxf(0.0, target_speed - current_speed)
 	if speed_gain > 0.0:
 		sleeping = false
-		disabled_elapsed = minf(disabled_elapsed, smoke_duration * 0.5)
 		$ImpactSmoke.emitting = true
 		apply_central_impulse(direction * mass * minf(speed_gain * 0.25, 1.5))
 		if spring_velocities.size() == 5:
 			spring_velocities[0] = clampf(spring_velocities[0] - speed_gain * 0.08,-3.0,3.0)
 		apply_crumple(truck_speed,direction)
 
+func randomize_tumble() -> void:
+	angular_velocity = Vector3(traffic_rng.randf_range(-6.0, 6.0), traffic_rng.randf_range(-3.0, 3.0), traffic_rng.randf_range(-6.0, 6.0))
+	if angular_velocity.length() < 3.0:
+		angular_velocity.x = 5.0
+
+func boost_bounce(direction: Vector3, truck_speed: float) -> bool:
+	if not disabled or exploded or bounce_cooldown > 0.0:
+		return false
+	bounce_cooldown = 0.3
+	sleeping = false
+	linear_velocity = direction.normalized() * clampf(truck_speed * 1.25, 18.0, 42.0) + Vector3.UP * 9.0
+	incoming_velocity = linear_velocity
+	randomize_tumble()
+	return true
+
+func explode() -> void:
+	exploded = true
+	collision_layer = 0
+	collision_mask = 0
+	$VehicleLights.visible = false
+	for mesh in $Visual.find_children("*", "MeshInstance3D", true, false):
+		mesh.material_overlay = null
+	preload("res://explosion_card.gd").spawn(get_tree().current_scene, global_position + Vector3.UP * 1.8, 9.0)
+
+func fit_collision_to_model() -> void:
+	var bounds: Array[AABB] = []
+	collect_model_bounds($Visual, Transform3D.IDENTITY, bounds)
+	if bounds.is_empty():
+		return
+	var combined := bounds[0]
+	for index in range(1, bounds.size()):
+		combined = combined.merge(bounds[index])
+	var lower := combined.position - Vector3(collision_padding, 0.0, collision_padding)
+	var upper := combined.end + Vector3(collision_padding, collision_padding + spring_travel, collision_padding)
+	# Tires meet the road; padding must not bury the collider beneath it.
+	lower.y = maxf(0.025, lower.y)
+	var shape := BoxShape3D.new()
+	shape.size = (upper - lower).max(Vector3(0.5, 0.5, 0.5))
+	collision_center = (lower + upper) * 0.5
+	$CarCollision.shape = shape
+	$CarCollision.position = collision_center
+	continuous_cd = true
+
+func collect_model_bounds(node: Node3D, relative: Transform3D, bounds: Array[AABB]) -> void:
+	if node is MeshInstance3D and node.mesh:
+		bounds.append(relative * node.get_aabb())
+	for child in node.get_children():
+		if child is Node3D:
+			collect_model_bounds(child, relative * child.transform, bounds)
+
 func snap_collision_to_ground() -> void:
 	if not is_instance_valid(city):
 		return
 	var required_y := -INF
-	for local_x in [-1.2, 1.2]:
-		for local_z in [-2.05, 2.05]:
-			var offset: Vector3 = global_transform.basis * Vector3(local_x, 0.0, local_z)
+	var half_size: Vector3 = $CarCollision.shape.size * 0.5
+	for local_x in [-half_size.x, half_size.x]:
+		for local_z in [-half_size.z, half_size.z]:
+			var offset: Vector3 = global_transform.basis * (collision_center + Vector3(local_x, -half_size.y, local_z))
 			var x := global_position.x + offset.x
 			var z := global_position.z + offset.z
 			var ground: float = city.terrain_surface_height_at(x, z)
@@ -387,6 +483,7 @@ func update_car_pose(delta: float) -> void:
 	var blend := 1.0 if delta <= 0.0 else 1.0-exp(-8.0*delta)
 	$Visual.rotation.x = lerp_angle($Visual.rotation.x,clampf(pitch,-0.3,0.3),blend)
 	$Visual.rotation.z = lerp_angle($Visual.rotation.z,clampf(roll,-0.3,0.3),blend)
+	$CarCollision.transform = $Visual.transform * Transform3D(Basis.IDENTITY, collision_center)
 	if spring_skeleton:
 		$VehicleLights.sync_with_chassis()
 	else:

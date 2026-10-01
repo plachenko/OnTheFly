@@ -40,6 +40,7 @@ func _ready() -> void:
 
 func tick_service(delta: float, shop_open: bool, open_at_pad: bool = false) -> void:
 	if not serving_enabled:return
+	if not get_parent().get_parent().has_ingredients():shop_open=false
 	if shop_open:service_started=true
 	if service_started and not expired:
 		service_remaining=maxf(0.0,service_remaining-delta)
@@ -61,12 +62,15 @@ func meter_text() -> String:
 	return "RED PAD • FEE $%d EVERY %ds"%[expired_fee,ceili(expired_fee_interval)] if expired else "SERVING WINDOW  •  %ds remaining"%ceili(service_remaining)
 
 func refresh_service_sign() -> void:
+	var needs_ingredients: bool = not Engine.is_editor_hint() and serving_enabled and not get_parent().get_parent().has_ingredients()
 	if has_node("ServiceSurface"):
 		var glow := $ServiceSurface.material_override as ShaderMaterial
 		glow.set_shader_parameter("glow_color", expired_glow_color if expired else available_glow_color)
 		glow.set_shader_parameter("glow_strength", glow_strength)
 	if has_node("ServiceSign"):
 		$ServiceSign.text="CLOSED\nMOVE TO GREEN" if expired else ("SERVE HERE\n%d seconds"%ceili(service_remaining) if service_started else "SERVE HERE\nOPEN KITCHEN")
+		if needs_ingredients and not expired:
+			$ServiceSign.text = "NEED INGREDIENTS\nRESTOCK TO SERVE"
 	if has_node("WorldMeter"):
 		var display=$WorldMeter/DisplayViewport/Progress
 		display.value=meter_percent()

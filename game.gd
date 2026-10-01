@@ -20,6 +20,14 @@ extends Node3D
 @export var camera_obstruction_padding: float = 0.35
 @export var camera_obstruction_smoothing: float = 10.0
 var camera_started: bool = false
+@export var camera_spring_stiffness: float = 65.0
+@export var camera_spring_damping: float = 9.0
+var camera_spring_velocity: Vector3 = Vector3.ZERO
+var camera_height_velocity: float = 0.0
+@export_range(0.0, 1.0, 0.05) var camera_roll_strength: float = 0.15
+@export_range(0.0, 5.0, 0.25) var camera_max_roll_degrees: float = 1.5
+@export var camera_roll_response: float = 2.5
+var camera_roll: float = 0.0
 var camera_return_timer: float = 0.0
 var camera_default_orbit: float = 0.0
 var camera_default_pitch: float = 0.42
@@ -48,6 +56,12 @@ var total_pad_fees: int = 0
 var starting_luck: int = 0
 var carried_balance: bool = false
 var round_finished: bool = false
+@export_category("Ingredients")
+@export_range(0, 100, 1) var starting_ingredients: int = 30
+@export_range(1, 100, 1) var ingredient_capacity: int = 60
+@export_range(1, 100, 1) var ingredient_refill_amount: int = 20
+@export_range(0, 100, 1) var ingredient_refill_price: int = 20
+var ingredients: int = 0
 @export_category("Upgrade Shop")
 @export var booster_price: int = 60
 @export var boost_canister_price: int = 20
@@ -134,14 +148,37 @@ func charge_expired_pad_fee(pad: Area3D) -> void:
 	truck.message_timer=2.0
 	$PatronManager.last_sale=truck.message
 
+func ingredient_quote() -> Dictionary:
+	return {"amount": mini(ingredient_refill_amount, maxi(0, ingredient_capacity - ingredients)), "price": ingredient_refill_price}
+
+func buy_ingredients() -> bool:
+	var quote := ingredient_quote()
+	if not can_repair() or quote.amount <= 0 or money < quote.price:
+		return false
+	money -= quote.price
+	ingredients += quote.amount
+	truck.message = "Restocked +%d ingredient portions" % quote.amount
+	truck.message_timer = 2.5
+	return true
+
+func has_ingredients() -> bool:
+	return ingredients > 0
+
 func active_serving_pad() -> Node3D:
 	var pad=truck.parking_pad
-	if round_finished or remaining_time<=0 or not is_instance_valid(pad) or pad==repair_pad:return null
+	if round_finished or remaining_time<=0 or not has_ingredients() or not is_instance_valid(pad) or pad==repair_pad:return null
 	if not pad.serving_enabled or pad.expired or not pad.contains_truck(truck):return null
 	if truck.deployed and truck.opening>.99 and absf(truck.speed)<.5 and truck.health>0:return pad
 	return null
 
 func _ready() -> void:
+	ingredients = clampi(starting_ingredients, 0, ingredient_capacity)
+	var guides = preload("res://poi_guides.gd").new()
+	guides.name = "POIGuides"
+	$HUD/Layout.add_child(guides)
+	var touch_controls = load("res://mobile_controls.gd").new()
+	touch_controls.name = "MobileControls"
+	add_child(touch_controls)
 	camera_default_orbit = orbit
 	camera_default_pitch = pitch
 	camera_default_distance = distance
@@ -194,12 +231,21 @@ func _process(delta: float) -> void:
 		orbit = lerp_angle(orbit,camera_default_orbit,return_blend)
 		pitch = lerpf(pitch,camera_default_pitch,return_blend)
 		distance = lerpf(distance,camera_default_distance,return_blend)
-	var raw_focus: Vector3 = truck.global_position + Vector3(0,1.8,0)
+	var frame_transform: Transform3D = truck.model.global_transform * truck.skeleton.get_bone_global_pose(truck.chassis)
+	var raw_focus: Vector3 = frame_transform.origin + Vector3(0,1.8,0)
+	if camera_follow_focus.distance_to(raw_focus) > 25.0:
+		camera_follow_focus = raw_focus
+		camera_height_velocity = 0.0
+		camera_spring_velocity = Vector3.ZERO
+		camera_roll = 0.0
+		camera_started = false
 	var horizontal_blend: float = 1.0-exp(-camera_smoothing*delta)
-	var height_blend: float = 1.0-exp(-camera_height_smoothing*delta)
+	var spring_step: float = minf(delta, 0.1) / 6.0
 	camera_follow_focus.x = lerpf(camera_follow_focus.x,raw_focus.x,horizontal_blend)
 	camera_follow_focus.z = lerpf(camera_follow_focus.z,raw_focus.z,horizontal_blend)
-	camera_follow_focus.y = lerpf(camera_follow_focus.y,raw_focus.y,height_blend)
+	for substep in 6:
+		camera_height_velocity += ((raw_focus.y - camera_follow_focus.y) * camera_height_smoothing * 18.0 - camera_height_velocity * 7.0) * spring_step
+		camera_follow_focus.y += camera_height_velocity * spring_step
 	var focus: Vector3 = camera_follow_focus
 	var speed_ratio: float = clampf(absf(truck.speed)/maxf(1.0,truck.forward_speed),0.0,1.0)
 	speed_camera_blend = lerpf(speed_camera_blend,speed_ratio,1.0-exp(-speed_camera_response*delta))
@@ -218,7 +264,9 @@ func _process(delta: float) -> void:
 	damage_bar.value = 100.0*(1.0-truck.health/truck.max_health)
 	damage_label.text = "DAMAGE %d%%" % roundi(damage_bar.value)
 	if camera_started:
-		camera.global_position = camera.global_position.lerp(target, 1.0-exp(-camera_smoothing*delta))
+		for substep in 6:
+			camera_spring_velocity += ((target - camera.global_position) * camera_spring_stiffness - camera_spring_velocity * camera_spring_damping) * spring_step
+			camera.global_position += camera_spring_velocity * spring_step
 	else:
 		camera.global_position = target
 		camera_started = true
@@ -239,7 +287,16 @@ func _process(delta: float) -> void:
 		var visible_direction: Vector3 = camera.global_position-focus
 		var safe_position: Vector3 = focus+visible_direction.normalized()*safe_distance
 		camera.global_position = camera.global_position.lerp(safe_position,1.0-exp(-camera_obstruction_smoothing*delta))
+		# Avoid storing spring momentum into an obstruction.
+		var outward := visible_direction.normalized()
+		camera_spring_velocity -= outward * maxf(0.0, camera_spring_velocity.dot(outward))
 	camera.look_at(focus)
+	var frame_right := frame_transform.basis.x.normalized()
+	var frame_roll := asin(clampf(frame_right.y, -1.0, 1.0))
+	var roll_limit := deg_to_rad(camera_max_roll_degrees)
+	var target_roll := clampf(frame_roll * camera_roll_strength, -roll_limit, roll_limit) * (1.0 - kitchen_blend)
+	camera_roll = lerpf(camera_roll, target_roll, 1.0 - exp(-camera_roll_response * delta))
+	camera.rotate_object_local(Vector3.BACK, camera_roll)
 	camera_clip_amount = move_toward(camera_clip_amount,0.88 if building_clip else 0.0,delta*6.0)
 	camera_clip_mask.material.set_shader_parameter("strength",camera_clip_amount)
 	speed_label.text = "%d km/h" % roundi(absf(truck.speed)*3.6)

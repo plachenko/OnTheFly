@@ -96,6 +96,7 @@ var turn_signal: int = 0
 var hazards_on: bool = false
 var signal_start_heading: float = 0.0
 var signal_turn_completed: bool = false
+var damage_effects: Node3D
 
 func _ready() -> void:
     model = $Model
@@ -116,6 +117,9 @@ func _ready() -> void:
     var front_center = (skeleton.get_bone_global_rest(suspension_bones[0]).origin+skeleton.get_bone_global_rest(suspension_bones[1]).origin)*.5
     front_axle_pivot=to_local(skeleton.to_global(front_center))
     front_axle_pivot.y=0.0
+    damage_effects = preload("res://truck_damage_effects.gd").new()
+    damage_effects.name = "DamageEffects"
+    add_child(damage_effects)
 
 func _physics_process(delta: float) -> void:
     var previous_speed = speed
@@ -132,7 +136,11 @@ func _physics_process(delta: float) -> void:
     var servicing = get_parent().has_method("can_repair") and get_parent().can_repair()
     if Input.is_action_just_pressed("serve") and not servicing:
         if absf(speed) < 0.5:
-            deployed = not deployed
+            if not deployed and not get_parent().has_ingredients():
+                message = "Need ingredients to unlock serving — restock at the service station."
+                message_timer = 3.0
+            else:
+                deployed = not deployed
         else:
             message = "Stop the truck before opening the kitchen."
             message_timer = 2.5
@@ -274,7 +282,10 @@ func _physics_process(delta: float) -> void:
         if absf(hit.get_normal().y) < .5:
             strongest_impact = maxf(strongest_impact,impact * (.15 if body is RigidBody3D and not body.has_method("knock_down") else 1.0))
         if body.has_method("push_from_truck"):
-            body.push_from_truck(forward*signf(speed),absf(speed),hit.get_position())
+            if boost_active and body.has_method("boost_bounce"):
+                body.boost_bounce(-global_basis.z,absf(speed))
+            else:
+                body.push_from_truck(forward*signf(speed),absf(speed),hit.get_position())
             speed *= 0.97
         elif body is RigidBody3D and not body.has_method("knock_down"):
             var impulse = -hit.get_normal() * minf(absf(speed) * cone_push_strength, 25.0)
@@ -300,7 +311,10 @@ func _physics_process(delta: float) -> void:
     skeleton.set_bone_pose_rotation(counter, Quaternion(Vector3.RIGHT, -PI / 2.0 * eased))
 
 func take_damage(amount: float) -> void:
+    var previous_health := health
     health = maxf(0.0,health-maxf(0.0,amount)*(1.0-armor_reduction if armor_owned else 1.0))
+    if health < previous_health and is_instance_valid(damage_effects):
+        damage_effects.damage_taken()
 
 func effective_climb_height() -> float:
     return maxf(max_climb_height,lifted_climb_height) if lift_owned else max_climb_height
@@ -327,6 +341,10 @@ func pivot_about_front_axle(angle: float) -> void:
 func try_boost_break(body: Node, normal: Vector3, direction: Vector3) -> bool:
     if not boost_active or not body is PhysicsBody3D:
         return false
+    if body.has_method("boost_bounce") and body.boost_bounce(-global_basis.z,absf(speed)):
+        message = "Boost rebound!"
+        message_timer = 1.0
+        return true
     var breakable = body.get_node_or_null("BoostBreakable")
     var approach_speed = maxf(0.0,-(direction*speed).dot(normal))
     if not breakable or not breakable.smash(boost_break_max_size,approach_speed,direction):

@@ -22,6 +22,7 @@ config/features=PackedStringArray("4.7", "GL Compatibility")
 
 GameOptions="*res://game_options.gd"
 ScreenshotCapture="*res://screenshot_capture.gd"
+ReplayRecorder="*res://replay_recorder.gd"
 
 [debug]
 

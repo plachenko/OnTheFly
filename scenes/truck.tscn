@@ -1,7 +1,7 @@
 [gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://truck.gd" id="1_w5yki"]
-[ext_resource type="PackedScene" path="res://assets/truck_opposite_side.glb" id="2_2lgic"]
+[ext_resource type="PackedScene" path="res://assets/truck_with_doors.glb" id="2_2lgic"]
 [ext_resource type="PackedScene" path="res://scenes/vehicle_lights.tscn" id="3_lights"]
 [ext_resource type="Script" path="res://fsd_navigator.gd" id="4_fsd"]
 
