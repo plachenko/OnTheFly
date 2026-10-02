@@ -331,6 +331,8 @@ func make_snapshot() -> Dictionary:
 		if not is_instance_valid(body): continue
 		if PerformanceDiagnostics.optimized_snapshots and body.freeze and not body.is_in_group("traffic_motion") and not (body.has_method("knock_down") and body.fallen): continue
 		props[str(get_path_to(body))] = {"transform": body.global_transform, "fallen": body.get("fallen") if body.has_method("knock_down") else false}
+		if body.has_method("get_hybrid_snapshot"):
+			props[str(get_path_to(body))]["hybrid"] = body.get_hybrid_snapshot()
 	var broken: Array[String] = []
 	var breakables: Array = snapshot_breakables if PerformanceDiagnostics.optimized_snapshots else find_children("BoostBreakable", "Node3D", true, false)
 	for node in breakables:
@@ -359,7 +361,14 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 		var body := get_node_or_null(NodePath(path)) as RigidBody3D
 		if body == null: continue
 		body.global_transform = snapshot.props[path].transform
+		if body.has_method("apply_hybrid_snapshot"):
+			body.apply_hybrid_snapshot(snapshot.props[path].get("hybrid", {}))
 		if body.has_method("knock_down"): body.fallen = snapshot.props[path].fallen
+	# Traffic is always included in prop snapshots, even with optimized snapshots.
+	# Mirror authoritative cleanup rather than retaining invisible client colliders.
+	for car in get_tree().get_nodes_in_group("traffic_motion"):
+		if is_ancestor_of(car) and car.has_method("get_hybrid_snapshot") and car.hybrid_reactions_enabled and not snapshot.get("props", {}).has(str(get_path_to(car))):
+			car.queue_free()
 	for path in snapshot.get("broken", []):
 		var node := get_node_or_null(NodePath(path))
 		if node == null or node.broken: continue

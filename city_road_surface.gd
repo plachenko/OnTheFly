@@ -15,10 +15,17 @@ static func sample(city: Node3D, point: Vector2) -> float:
 
 static func emit_piece(city: Node3D, tool: SurfaceTool, polygon: PackedVector2Array, lift: float, origin: Vector3, lift_at: Callable = Callable()) -> void:
 	var indices := Geometry2D.triangulate_polygon(polygon)
-	for index in indices:
-		var point := polygon[index]
-		var local_lift: float = lift_at.call(point) if lift_at.is_valid() else lift
-		tool.add_vertex(Vector3(point.x, sample(city, point) + local_lift, point.y) - origin)
+	for triangle in range(0, indices.size(), 3):
+		var a := polygon[indices[triangle]]
+		var b := polygon[indices[triangle + 1]]
+		var c := polygon[indices[triangle + 2]]
+		# Polygon clipping can leave microscopic slivers along shared cell edges.
+		# These contribute no visible area and destabilize trimesh collision.
+		if absf((b - a).cross(c - a)) < 0.0001: continue
+		for index in range(triangle, triangle + 3):
+			var point := polygon[indices[index]]
+			var local_lift: float = lift_at.call(point) if lift_at.is_valid() else lift
+			tool.add_vertex(Vector3(point.x, sample(city, point) + local_lift, point.y) - origin)
 
 static func cell_triangles(city: Node3D, rect: Rect2) -> Array[PackedVector2Array]:
 	var segments: int = maxi(8, roundi(city.terrain_size / city.terrain_step))

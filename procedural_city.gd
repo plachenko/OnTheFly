@@ -535,28 +535,28 @@ func make_road_decals(vertical_streets: Array[int], horizontal_streets: Array[in
 	var grate_slots := StandardMaterial3D.new()
 	grate_slots.albedo_color = Color(0.31, 0.34, 0.35)
 	grate_slots.roughness = 0.7
-	var line_distance := maxf(stop_line_setback, crosswalk_setback + 4.5)
 	var rules := preload("res://city_road_rules.gd")
 	for x in vertical_streets:
 		for z in horizontal_streets:
+			var junction := Vector3(x, 0, z)
+			var south_distance := rules.stop_boundary(self, Vector3.BACK, junction)
+			var north_distance := rules.stop_boundary(self, Vector3.FORWARD, junction)
+			var east_distance := rules.stop_boundary(self, Vector3.RIGHT, junction)
+			var west_distance := rules.stop_boundary(self, Vector3.LEFT, junction)
 			var vertical_direction := rules.one_way(true, x)
 			var wide_v := rules.extra_width(true, x, -1)
 			if vertical_direction >= 0:
-				add_terrain_patch($Roads, "StopLine_Southbound", 7.2 + wide_v + (8.0 if vertical_direction != 0 else 0.0), 0.42, 0.18, stop_paint, Vector2(x - wide_v * 0.5 - (4.0 if vertical_direction == 0 else 0.0), z - line_distance), 0.5, true)
-			if vertical_direction <= 0 and z + line_distance < road_visual_extent - 1.0:
-				add_terrain_patch($Roads, "StopLine_Northbound", 7.2, 0.42, 0.18, stop_paint, Vector2(x + 4.0, z + line_distance), 0.5, true)
+				add_terrain_patch($Roads, "StopLine_Southbound", 7.2 + wide_v + (8.0 if vertical_direction != 0 else 0.0), 0.42, 0.18, stop_paint, Vector2(x - wide_v * 0.5 - (4.0 if vertical_direction == 0 else 0.0), z - south_distance), 0.5, true)
+			if vertical_direction <= 0 and z + north_distance < road_visual_extent - 1.0:
+				add_terrain_patch($Roads, "StopLine_Northbound", 7.2, 0.42, 0.18, stop_paint, Vector2(x + 4.0, z + north_distance), 0.5, true)
 			if z > -144 and z < 176:
 				var horizontal_direction := rules.one_way(false, z)
 				var wide_h := rules.extra_width(false, z, 1)
 				if horizontal_direction >= 0:
-					add_terrain_patch($Roads, "StopLine_Eastbound", 0.42, 7.2 + wide_h, 0.18, stop_paint, Vector2(x - line_distance, z + 4.0 + wide_h * 0.5), 0.5, true)
+					add_terrain_patch($Roads, "StopLine_Eastbound", 0.42, 7.2 + wide_h, 0.18, stop_paint, Vector2(x - east_distance, z + 4.0 + wide_h * 0.5), 0.5, true)
 				if horizontal_direction <= 0:
-					add_terrain_patch($Roads, "StopLine_Westbound", 0.42, 7.2 + (8.0 if horizontal_direction != 0 else 0.0), 0.18, stop_paint, Vector2(x + line_distance, z - (4.0 if horizontal_direction == 0 else 0.0)), 0.5, true)
-		for z in [-112, -48, 16, 80, 144]:
-			add_sewer_grate(Vector2(x - (road_width * 0.5 - 0.7), z), true, grate_metal, grate_slots)
-	for z in horizontal_streets:
-		for x in [-96, -32, 32, 96]:
-			add_sewer_grate(Vector2(x, z + (road_width * 0.5 - 0.7)), false, grate_metal, grate_slots)
+					add_terrain_patch($Roads, "StopLine_Westbound", 0.42, 7.2 + (8.0 if horizontal_direction != 0 else 0.0), 0.18, stop_paint, Vector2(x + west_distance, z - (4.0 if horizontal_direction == 0 else 0.0)), 0.5, true)
+	preload("res://city_street_fixtures.gd").generate(self, vertical_streets, horizontal_streets, grate_metal, grate_slots)
 
 func rounded_block_contour(center: Vector2, inset: float = 0.0) -> PackedVector2Array:
 	var points := PackedVector2Array()
@@ -936,6 +936,7 @@ func add_terrain_patch(parent: Node3D, label: String, width_x: float, width_z: f
 		visual.name = label
 		visual.mesh = mesh
 		visual.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		visual.set_meta("surface_decal", label)
 		parent.add_child(visual)
 		return
 	if label == "Sidewalk":
@@ -1027,7 +1028,7 @@ func make_crosswalks() -> void:
 			for stripe in range(15 + ceili(preload("res://city_road_rules.gd").extra_width(false, intersection_z, 1))):
 				var offset_z := float(stripe - 7)
 				add_terrain_patch(crossing,"Stripe_%d" % stripe,3.6,0.5,0.20,paint,Vector2(0.0,offset_z),0.25,true)
-			if (crossing_index * 7) % 20 < roundi(20.0 * multi_crosswalk_fraction):
+			if preload("res://city_road_rules.gd").perpendicular_crosswalk(self, Vector3(intersection_x, 0, intersection_z)):
 				make_perpendicular_crosswalk(intersection_x, intersection_z, crossing_index, phase_offset, paint)
 
 func make_perpendicular_crosswalk(intersection_x: float, intersection_z: float, index: int, phase_offset: float, paint: Material) -> void:
@@ -1155,7 +1156,7 @@ func make_stop_signs() -> void:
 			var sign := Node3D.new()
 			sign.name = "StopSign_%d_%d" % [road_x, roundi(intersection_z)]
 			var sign_x: float = float(road_x) - side * (10.3 + preload("res://city_road_rules.gd").extra_width(true, road_x, -side))
-			var sign_z: float = intersection_z - side * 12.0
+			var sign_z: float = intersection_z - side * preload("res://city_road_rules.gd").stop_boundary(self, Vector3(0, 0, side), Vector3(road_x, 0, intersection_z))
 			sign.position = Vector3(sign_x, height_at(sign_x, sign_z), sign_z)
 			$StreetSigns.add_child(sign)
 			var pole_mesh := CylinderMesh.new()
@@ -1320,7 +1321,6 @@ func make_street_parking() -> void:
 					bay_node.set_meta("parking_row", 1)
 		bay_node.set_meta("occupied", not is_serving and ordinary_index < occupied_count)
 		$ParkingSpaces.add_child(bay_node)
-		add_street_parking_markings(bay_node, vertical, bay_asphalt, bay_paint, parking_bay_width, parking_bay_length)
 		if is_serving:
 			make_city_serving_bay(bay, serving_centers.find(center) + 1)
 			continue
@@ -1337,6 +1337,10 @@ func make_street_parking() -> void:
 		car.set("intersection_turn_chance", 0.0)
 		car.set("model_scene", load(parked_models[rng.randi_range(0, parked_models.size() - 1)]))
 		$ParkedCars.add_child(car)
+	# All positions must exist before shared boundaries can be identified.
+	for bay_node in $ParkingSpaces.get_children():
+		var axis: Vector3 = bay_node.get_meta("parking_axis")
+		add_street_parking_markings(bay_node, absf(axis.z) > 0.5, bay_asphalt, bay_paint, parking_bay_width, parking_bay_length)
 
 func make_city_serving_bay(bay: Dictionary, number: int) -> void:
 	var level := get_parent()
@@ -1380,6 +1384,7 @@ func parking_near_gameplay_object(center: Vector2) -> bool:
 	return false
 
 func add_street_parking_markings(bay: Node3D, vertical: bool, asphalt: Material, paint: Material, bay_width: float = 3.4, bay_length: float = 11.4) -> void:
+	bay.set_meta("parking_paint_length", bay_length)
 	add_terrain_patch(bay, "ParkingBaySurface", bay_width if vertical else bay_length, bay_length if vertical else bay_width, 0.105, asphalt, Vector2.ZERO, 0.5, true)
 	# Retain the footprint for editor/spawn sizing without a filled rectangular tile.
 	for child in bay.get_children():
@@ -1387,17 +1392,13 @@ func add_street_parking_markings(bay: Node3D, vertical: bool, asphalt: Material,
 	var surface := SurfaceTool.new()
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var half := Vector2(bay_width, bay_length) * 0.5
-	var grouped: bool = int(bay.get_meta("parking_row", 0)) != 0 and not bay.get_meta("serving", false)
+	var special: bool = bay.get_meta("serving", false)
 	var segments: Array = []
-	var curb_side: float = float(bay.get_meta("parking_side", 1.0))
 	var corners := [Vector2(-half.x, -half.y), Vector2(half.x, -half.y), Vector2(half.x, half.y), Vector2(-half.x, half.y)]
-	if grouped and curb_side < 0:
-		for i in 4: corners[i].x = -corners[i].x
-	for i in 4:
-		if grouped and i == 3:
-			segments.append([corners[3], corners[3] + Vector2(0, -0.7)])
-			segments.append([corners[0], corners[0] + Vector2(0, 0.7)])
-		else: segments.append([corners[i], corners[(i + 1) % 4]])
+	if special:
+		for i in 4: segments.append([corners[i], corners[(i + 1) % 4]])
+	else:
+		preload("res://city_parking_paint.gd").emit(self, bay, vertical, surface, bay_width, bay_length)
 	for segment in segments:
 		var a: Vector2 = segment[0] if vertical else Vector2(segment[0].y, segment[0].x)
 		var b: Vector2 = segment[1] if vertical else Vector2(segment[1].y, segment[1].x)

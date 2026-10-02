@@ -69,6 +69,14 @@ var power_slide_used: bool = false
 @export_range(0.5, 4.0, 0.1) var hill_jump_cooldown_seconds: float = 1.8
 var hill_jump_cooldown: float = 0.0
 var hill_jump_active: bool = false
+@export_category("Car Landing Launch")
+@export var car_landing_min_speed := 3.0
+@export var car_landing_upward_speed := 12.0
+@export var car_landing_lateral_speed := 14.0
+@export var car_landing_cooldown_seconds := 0.8
+var car_landing_cooldown := 0.0
+var car_launch_active := false
+var car_launch_horizontal := Vector3.ZERO
 @export_range(0.5, 4.0, 0.1) var hill_jump_min_upward_momentum: float = 1.5
 var uphill_momentum: float = 0.0
 var slope_upward_speed: float = 0.0
@@ -155,6 +163,10 @@ func _physics_process(delta: float) -> void:
     impact_cooldown = maxf(0.0, impact_cooldown-delta)
     climb_cooldown = maxf(0.0,climb_cooldown-delta)
     hill_jump_cooldown = maxf(0.0,hill_jump_cooldown-delta)
+    car_landing_cooldown = maxf(0.0,car_landing_cooldown-delta)
+    if car_launch_active and is_on_floor() and velocity.y <= 0.0:
+        car_launch_active = false
+        car_launch_horizontal = Vector3.ZERO
     message_timer = maxf(0.0, message_timer - delta)
     if not round_over and health > 0.0 and health/max_health < critical_health_ratio:
         health = maxf(0.0,health-critical_health_drain*delta)
@@ -259,10 +271,14 @@ func _physics_process(delta: float) -> void:
     var forward = Vector3(-sin(travel_heading),0,-cos(travel_heading))
     velocity.x = forward.x * speed
     velocity.z = forward.z * speed
+    if car_launch_active:
+        velocity.x = car_launch_horizontal.x
+        velocity.z = car_launch_horizontal.z
     update_uphill_momentum(forward, delta)
-    if velocity.y > 0.0 and not hill_jump_active:
+    if velocity.y > 0.0 and not hill_jump_active and not car_launch_active:
         velocity.y = minf(velocity.y, slope_upward_speed if is_on_floor() else 0.0)
-    try_hill_jump(forward)
+    if not car_launch_active:
+        try_hill_jump(forward)
     if not is_on_floor():
         velocity.y -= 20.0 * delta
     elif velocity.y <= 0.0:
@@ -273,7 +289,8 @@ func _physics_process(delta: float) -> void:
         var car_body: Object = car_sweep.get_collider()
         if car_body.has_method("disable_from_impact"):
             var car_approach: float = maxf(0.0,-motion.normalized().dot(car_sweep.get_normal())*absf(speed))
-            if car_body.disable_from_impact(car_approach,forward*signf(speed),car_sweep.get_position()):
+            var car_contact: bool = car_body.receive_vehicle_contact(forward * speed, -car_sweep.get_normal(), car_sweep.get_position()) if car_body.has_method("receive_vehicle_contact") else car_body.disable_from_impact(car_approach,forward*signf(speed),car_sweep.get_position())
+            if car_contact:
                 PoliceDispatch.report_collision(car_body)
                 take_damage(car_approach*0.6)
                 speed *= 0.35
@@ -288,11 +305,12 @@ func _physics_process(delta: float) -> void:
     var landing_speed := maxf(0.0,-velocity.y)
     var was_grounded := is_on_floor()
     var approved_upward_speed := maxf(0.0, velocity.y)
+    var approach_velocity := velocity
     move_and_slide()
     # The solver may redirect horizontal collisions upward. Only terrain
     # momentum at driving speed may turn that into an airborne launch.
     if velocity.y > 0.0:
-        if hill_jump_active:
+        if hill_jump_active or car_launch_active:
             velocity.y = minf(velocity.y, approved_upward_speed)
         elif is_on_floor():
             velocity.y = minf(velocity.y, slope_upward_speed)
@@ -315,8 +333,11 @@ func _physics_process(delta: float) -> void:
         if body.get_meta("sidewalk", false) or body.get_meta("drivable_surface", false):
             continue
         if body.has_method("disable_from_impact"):
+            if try_car_landing_launch(body, hit.get_normal(), hit.get_position(), approach_velocity):
+                continue
             var car_impact: float = absf((forward*speed).dot(hit.get_normal()))
-            if body.disable_from_impact(car_impact,forward*signf(speed),hit.get_position()):
+            var car_contact: bool = body.receive_vehicle_contact(forward * speed, -hit.get_normal(), hit.get_position()) if body.has_method("receive_vehicle_contact") else body.disable_from_impact(car_impact,forward*signf(speed),hit.get_position())
+            if car_contact:
                 PoliceDispatch.report_collision(body)
                 take_damage(car_impact * 0.6)
                 speed *= .55
@@ -678,6 +699,33 @@ func update_suspension(delta: float) -> void:
         skeleton.set_bone_pose_rotation(steer_bones[i],Quaternion(Vector3.BACK,steer if i < 2 else 0.0))
         skeleton.set_bone_pose_rotation(spin_bones[i],Quaternion(Vector3.UP,rolling))
 
+func car_landing_direction() -> Vector3:
+    if not manual_controls_enabled:
+        return Vector3.ZERO
+    # Action strengths already include the configured controller deadzones.
+    var local := Vector3(control_axis("left", "right"), 0, -control_axis("reverse", "accelerate"))
+    local = local.limit_length(1.0)
+    var world := Basis(Vector3.UP, rotation.y) * local
+    return world
+
+func try_car_landing_launch(body: Node, normal: Vector3, point: Vector3, approach_velocity: Vector3) -> bool:
+    if not multiplayer.is_server() or car_landing_cooldown > 0.0 or health <= 0.0 or round_over:
+        return false
+    if not body.has_method("consume_truck_landing") or not body.has_method("is_roof_landing"):
+        return false
+    if not body.is_roof_landing(normal, point, approach_velocity, car_landing_min_speed):
+        return false
+    if not body.consume_truck_landing():
+        return false
+    car_landing_cooldown = maxf(0.1, car_landing_cooldown_seconds)
+    car_launch_active = true
+    hill_jump_active = false
+    car_launch_horizontal = car_landing_direction() * clampf(car_landing_lateral_speed, 0, 30)
+    velocity = car_launch_horizontal + Vector3.UP * clampf(car_landing_upward_speed, 1, 25)
+    PoliceDispatch.report_collision(body)
+    take_damage(maxf(0.0, -(approach_velocity - body.motion_vector).y) * 0.6)
+    return true
+
 func reset_truck() -> void:
     global_transform = spawn_transform
     model.quaternion = model_rest_rotation
@@ -689,6 +737,9 @@ func reset_truck() -> void:
     climb_cooldown = 0.0
     hill_jump_cooldown = 0.0
     hill_jump_active = false
+    car_launch_active = false
+    car_launch_horizontal = Vector3.ZERO
+    car_landing_cooldown = 0.0
     uphill_momentum = 0.0
     slope_upward_speed = 0.0
     opening = 0.0

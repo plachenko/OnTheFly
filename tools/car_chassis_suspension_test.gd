@@ -10,6 +10,7 @@ func run() -> void:
 	await process_frame
 	var tested := 0
 	for car in scene.get_node("ProceduralCity/Traffic").get_children():
+		car.hybrid_reactions_enabled = false # Existing suspension fallback remains supported.
 		car.set_physics_process(false)
 		var skeleton: Skeleton3D = car.spring_skeleton
 		assert(skeleton != null)

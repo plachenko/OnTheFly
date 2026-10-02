@@ -12,6 +12,17 @@ static func road_masks(city: Node3D, shoulder: float = 0.0) -> Array[PackedVecto
 		var low: float = z - city.road_width * 0.5 - rules.extra_width(false, z, -1) - shoulder
 		var high: float = z + city.road_width * 0.5 + rules.extra_width(false, z, 1) + shoulder
 		masks.append(rect_polygon(Rect2(Vector2(-extent, low), Vector2(extent * 2, high - low))))
+	# Rounded curbs leave four pockets outside each block contour. The road
+	# must cover these too, instead of exposing the excavated terrain below.
+	for x in range(-96, 97, 64):
+		for z in range(-112, 145, 64):
+			var contour: PackedVector2Array = city.rounded_block_contour(Vector2(x, z))
+			var block_bounds := preload("res://city_road_surface.gd").bounds(contour)
+			for pocket in remaining(rect_polygon(block_bounds), [contour]):
+				if shoulder > 0:
+					masks.append_array(Geometry2D.offset_polygon(pocket, shoulder, Geometry2D.JOIN_ROUND))
+				else:
+					masks.append(pocket)
 	if city.diagonal_roads_enabled:
 		for segment in city.diagonal_road_segments:
 			var start := Vector2(segment.x, segment.y)

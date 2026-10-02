@@ -99,6 +99,15 @@ var turn_exit_axis: Vector3
 var distant_mode := false
 var proximity_timer := 0.0
 var distant_elapsed := 0.0
+@export var hybrid_reactions_enabled := true
+@export var hybrid_disabled_hold_seconds := 3.0
+@export var hybrid_disabled_fade_seconds := 2.0
+var hybrid: CharacterBody3D
+var hybrid_pending_relative := Vector3.ZERO
+var hybrid_pending_normal := Vector3.ZERO
+var hybrid_pending_strength := 0.0
+var hybrid_pending_motion := Vector3.ZERO
+var hybrid_hit_cooldown := 0.0
 var active_collision_layer := 1
 var active_collision_mask := 1
 
@@ -161,8 +170,33 @@ func _ready() -> void:
 	warning_material.emission = Color.RED
 	warning_material.emission_energy_multiplier = 2.0
 	update_car_pose(0.0)
+	if not Engine.is_editor_hint() and hybrid_reactions_enabled and supports_hybrid_model():
+		hybrid = preload("res://hybrid_car.gd").new()
+		hybrid.name = "SharedHybridReaction"
+		hybrid.external_owner = self
+		hybrid.external_visual = $Visual
+		hybrid.external_model = $Visual.get_child(0)
+		hybrid.disabled_hold_seconds = hybrid_disabled_hold_seconds
+		hybrid.disabled_fade_seconds = hybrid_disabled_fade_seconds
+		add_child(hybrid)
+		collision_center = $CarCollision.position
+		hybrid.exploded.connect(explode)
+
+func supports_hybrid_model() -> bool:
+	if not spring_skeleton or $Visual.get_child_count() == 0:
+		return false
+	for bone_name in ["Chassis", "Spring_FL", "Spring_FR", "Spring_RL", "Spring_RR"]:
+		if spring_skeleton.find_bone(bone_name) < 0:
+			return false
+	var wheels := 0
+	for mesh in $Visual.find_children("*", "MeshInstance3D", true, false):
+		if str(mesh.name).begins_with("wheel-") and ("left" in str(mesh.name) or "right" in str(mesh.name)):
+			wheels += 1
+	return wheels == 4
 
 func _physics_process(delta: float) -> void:
+	if not Engine.is_editor_hint() and not multiplayer.is_server():
+		return
 	if Engine.is_editor_hint():
 		_tick_traffic(delta)
 		return
@@ -178,7 +212,192 @@ func _physics_process(delta: float) -> void:
 			distant_elapsed = 0.0
 	else:
 		_tick_traffic(delta)
+	if hybrid_reactions_enabled and hybrid and not distant_mode:
+		step_hybrid(delta)
 	PerformanceDiagnostics.record_section("Traffic", Time.get_ticks_usec() - tick_started)
+
+func step_hybrid(delta: float) -> void:
+	hybrid_hit_cooldown = maxf(0.0, hybrid_hit_cooldown - delta)
+	if hybrid_pending_strength > 0.0 and current_driving_speed < 0.3:
+		hybrid.velocity = motion_vector
+		hybrid.rollover_inherited_velocity = hybrid_pending_motion
+		hybrid.receive_impact(hybrid.velocity + hybrid_pending_relative, hybrid_pending_normal)
+		hybrid_pending_strength = 0.0
+		hybrid_pending_relative = Vector3.ZERO
+	if hybrid.state == hybrid.State.DRIVING:
+		hybrid.velocity = motion_vector
+	hybrid.external_acceleration = -driving_acceleration # Production front is +Z.
+	hybrid.steering = -steering_angle / 0.55
+	hybrid.speed = current_driving_speed
+	hybrid._physics_process(delta)
+	if hybrid.state in [hybrid.State.DRIVING, hybrid.State.REACTION]:
+		$CarCollision.transform = $Visual.transform * Transform3D(Basis.IDENTITY, collision_center)
+	if hybrid.state in [hybrid.State.FLIGHT, hybrid.State.DISABLED, hybrid.State.EXPLODED]:
+		if not disabled:
+			disabled = true
+			disabled_elapsed = 0.0
+			turning = false
+			turn_intent = 0
+		freeze = true
+		motion_vector = hybrid.velocity
+		linear_velocity = hybrid.velocity
+		incoming_velocity = hybrid.velocity
+	elif hybrid.contact_locked:
+		current_driving_speed = 0.0
+		driving_acceleration = 0.0
+		motion_vector = Vector3.ZERO
+	$VehicleLights.sync_with_chassis()
+
+func is_roof_landing(normal: Vector3, point: Vector3, other_velocity: Vector3, minimum_speed: float) -> bool:
+	if exploded or (disabled and (not hybrid or hybrid.state != hybrid.State.FLIGHT)):
+		return false
+	var relative := other_velocity - motion_vector
+	var shape := $CarCollision.shape as BoxShape3D
+	if not shape or normal.dot(Vector3.UP) < 0.7 or relative.y > -maxf(0.5, minimum_speed):
+		return false
+	if -relative.dot(normal) < maxf(0.5, minimum_speed):
+		return false
+	var local_point: Vector3 = $CarCollision.to_local(point)
+	var half := shape.size * 0.5
+	return local_point.y >= half.y * 0.65 and absf(local_point.x) <= half.x + 0.15 and absf(local_point.z) <= half.z + 0.15
+
+func consume_truck_landing() -> bool:
+	if not multiplayer.is_server() or exploded:
+		return false
+	disabled = true
+	disabled_elapsed = 0.0
+	hybrid_pending_strength = 0.0
+	freeze = true
+	if hybrid_reactions_enabled and hybrid:
+		hybrid.explode_once()
+	else:
+		explode()
+	return true
+
+func receive_vehicle_contact(other_velocity: Vector3, normal: Vector3, point: Vector3) -> bool:
+	if not hybrid_reactions_enabled or not hybrid:
+		return disable_from_impact(maxf(0.0, (other_velocity - motion_vector).dot(normal)), normal, point)
+	var relative := other_velocity - motion_vector
+	return queue_hybrid_impact(relative, normal)
+
+func queue_hybrid_impact(relative: Vector3, normal: Vector3) -> bool:
+	if not multiplayer.is_server() or disabled or exploded or hybrid_hit_cooldown > 0.0:
+		return false
+	var strength := maxf(0.0, relative.dot(normal.normalized()))
+	if strength < maxf(0.5, disabling_impact_speed):
+		return false
+	hybrid_hit_cooldown = 0.15
+	if distant_mode:
+		distant_mode = false
+		collision_layer = active_collision_layer
+		collision_mask = active_collision_mask
+		$VehicleLights.process_mode = Node.PROCESS_MODE_INHERIT
+		$VehicleLights.show()
+	if strength >= 12.0 or parked or current_driving_speed < 0.3:
+		hybrid.velocity = motion_vector
+		hybrid.receive_impact(hybrid.velocity + relative, normal)
+		if hybrid.state == hybrid.State.FLIGHT:
+			disabled = true
+			disabled_elapsed = 0.0
+			freeze = true
+			linear_velocity = hybrid.velocity
+			incoming_velocity = hybrid.velocity
+			motion_vector = hybrid.velocity
+			apply_crumple(strength, normal)
+	else:
+		# Brake through the existing route controller before capturing tire anchors.
+		if strength >= hybrid_pending_strength:
+			hybrid_pending_strength = strength
+			hybrid_pending_relative = relative
+			hybrid_pending_motion = motion_vector
+			hybrid_pending_normal = normal
+	return true
+
+func hybrid_chain_contact(hit: Dictionary, impact_velocity: Vector3) -> void:
+	var other := instance_from_id(hit.get("collider_id", 0))
+	if not is_instance_valid(other) or other == self or not other.has_method("receive_car_impact") or other.disabled:
+		return
+	var normal: Vector3 = hit.normal
+	var other_velocity: Vector3 = other.motion_vector
+	var approach := maxf(0.0, -(impact_velocity - other_velocity).dot(normal))
+	if approach >= chain_impact_min_speed and not pending_chain_hits.has(other.get_instance_id()):
+		pending_chain_hits[other.get_instance_id()] = true
+		apply_chain_hit.call_deferred(other, approach, -normal, hit.point)
+
+func tick_hybrid_cleanup(delta: float) -> void:
+	disabled_elapsed += delta
+	bounce_cooldown = maxf(0.0, bounce_cooldown - delta)
+	if hybrid.state != hybrid.State.DISABLED:
+		$ImpactSmoke.emitting = hybrid.state == hybrid.State.FLIGHT and disabled_elapsed < smoke_duration
+	$VehicleLights.set_driving_lights(false, false, false, false, true)
+	if hybrid.state == hybrid.State.DISABLED:
+		$VehicleLights.hide()
+		if hybrid.disabled_cue and hybrid.disabled_cue.complete():
+			queue_free()
+		return
+	if exploded and disabled_elapsed > fade_delay:
+		var amount := clampf((disabled_elapsed - fade_delay) / maxf(fade_duration, 0.01), 0, 1)
+		fade_visuals($Visual, amount)
+		if amount >= 1.0:
+			queue_free()
+
+func get_hybrid_snapshot() -> Dictionary:
+	if not hybrid_reactions_enabled or not hybrid:
+		return {}
+	var cue: Dictionary = {}
+	if hybrid.state == hybrid.State.DISABLED:
+		hybrid.ensure_disabled_cue()
+		cue = {"age": hybrid.disabled_cue.age, "hold": hybrid.disabled_cue.hold_seconds, "fade": hybrid.disabled_cue.fade_seconds}
+	var wheel_poses: Array = []
+	for wheel in hybrid.wheels:
+		var bone: int = wheel.bone
+		wheel_poses.append([bone, hybrid.wheel_rig.get_bone_pose_position(bone), hybrid.wheel_rig.get_bone_pose_rotation(bone), hybrid.wheel_rig.get_bone_pose_scale(bone)])
+	var lights := $VehicleLights
+	return {"root": global_transform, "rolling": {"momentum": hybrid.rollover_velocity, "distance": hybrid.rollover_distance, "settled": hybrid.rollover_settled}, "state": hybrid.state, "velocity": motion_vector, "disabled": disabled, "exploded": exploded, "elapsed": disabled_elapsed, "visual": $Visual.transform, "visible": $Visual.visible, "collision": $CarCollision.transform, "layer": collision_layer, "mask": collision_mask, "wheels": wheel_poses, "cue": cue, "lights": [lights.brake_enabled, lights.reverse_enabled, lights.left_enabled, lights.right_enabled, lights.hazard_enabled, lights.headlights_enabled, lights.police_enabled, lights.visible]}
+
+func apply_hybrid_snapshot(data: Dictionary) -> void:
+	if multiplayer.is_server() or not hybrid or data.is_empty():
+		return
+	if data.exploded and not exploded:
+		explode()
+	if data.has("root"):
+		global_transform = data.root
+	hybrid.state = data.state
+	hybrid.velocity = data.velocity
+	var rolling: Dictionary = data.get("rolling", {})
+	hybrid.rollover_velocity = rolling.get("momentum", Vector3.ZERO)
+	hybrid.rollover_distance = rolling.get("distance", 0.0)
+	hybrid.rollover_settled = rolling.get("settled", false)
+	disabled = data.disabled
+	exploded = data.exploded
+	disabled_elapsed = data.elapsed
+	motion_vector = data.velocity
+	$Visual.transform = data.visual
+	$Visual.visible = data.visible
+	$CarCollision.transform = data.collision
+	collision_layer = data.layer
+	collision_mask = data.mask
+	for wheel in data.wheels:
+		hybrid.wheel_rig.set_bone_pose_position(wheel[0], wheel[1])
+		hybrid.wheel_rig.set_bone_pose_rotation(wheel[0], wheel[2])
+		hybrid.wheel_rig.set_bone_pose_scale(wheel[0], wheel[3])
+	hybrid.wheel_rig.force_update_all_bone_transforms()
+	var lights: Array = data.get("lights", [])
+	if lights.size() == 8:
+		$VehicleLights.set_driving_lights(lights[0], lights[1], lights[2], lights[3], lights[4])
+		$VehicleLights.headlights_enabled = lights[5]
+		$VehicleLights.set_police_enabled(lights[6])
+		$VehicleLights.visible = lights[7]
+	if disabled:
+		$VehicleLights.set_driving_lights(false, false, false, false, true)
+		if hybrid.state == hybrid.State.DISABLED:
+			var cue: Dictionary = data.get("cue", {"age": disabled_elapsed, "hold": 3.0, "fade": 2.0})
+			hybrid.sync_disabled_cue(cue.age, cue.hold, cue.fade)
+			$VehicleLights.hide()
+		else:
+			hybrid.stop_disabled_cue()
+			fade_visuals($Visual, clampf((disabled_elapsed - fade_delay) / maxf(fade_duration, 0.01), 0, 1))
+	$VehicleLights.sync_with_chassis()
 
 func update_proximity_mode() -> void:
 	var nearest := INF
@@ -192,7 +411,7 @@ func update_proximity_mode() -> void:
 				truck = body
 	elif is_instance_valid(truck): nearest = global_position.distance_squared_to(truck.global_position)
 	var circle := get_node_or_null("PoliceCircle")
-	var must_stay_active: bool = disabled or (circle != null and circle.pursuing)
+	var must_stay_active: bool = disabled or hybrid_pending_strength > 0 or (hybrid != null and hybrid.state != hybrid.State.DRIVING) or (circle != null and circle.pursuing)
 	var radius := near_simulation_radius if distant_mode else maxf(near_simulation_radius + 5.0, sleep_simulation_radius)
 	var should_sleep := PerformanceDiagnostics.traffic_lod_enabled and not must_stay_active and nearest > radius * radius
 	if should_sleep == distant_mode: return
@@ -227,11 +446,19 @@ func step_distant_route(delta: float) -> void:
 func _tick_traffic(delta: float) -> void:
 	if not Engine.is_editor_hint():
 		update_horn(delta)
+	if hybrid_reactions_enabled and hybrid:
+		if disabled:
+			tick_hybrid_cleanup(delta)
+			return
+		if hybrid.contact_locked:
+			$VehicleLights.set_driving_lights(true, false, false, false, false)
+			return
 	if disabled:
 		motion_vector = linear_velocity
 	if disabled and not exploded:
 		incoming_velocity = linear_velocity
-	update_impact_springs(delta)
+	if not hybrid_reactions_enabled or not hybrid:
+		update_impact_springs(delta)
 	if disabled:
 		$VehicleLights.sync_with_chassis()
 	if disabled:
@@ -261,7 +488,7 @@ func _tick_traffic(delta: float) -> void:
 		return
 	var following_car := should_follow_car()
 	var truck_stopped := update_truck_avoidance(delta, following_car)
-	var stopped := should_wait_for_walk_light() or following_car or truck_stopped
+	var stopped := hybrid_pending_strength > 0 or should_wait_for_walk_light() or following_car or truck_stopped
 	var previous_driving_speed := current_driving_speed
 	update_drive_speed(0.0 if stopped else driving_speed, delta)
 	if current_driving_speed > 0.001:
@@ -299,6 +526,8 @@ func update_drive_speed(target_speed: float, delta: float) -> void:
 	current_driving_speed = next_speed
 
 func update_driving_suspension(acceleration: float, delta: float) -> void:
+	if hybrid_reactions_enabled and hybrid:
+		return
 	if spring_velocities.size() != 5:
 		return
 	# Load the rear under acceleration and the front under braking.
@@ -558,6 +787,10 @@ func should_follow_car() -> bool:
 	return false
 
 func disable_from_impact(approach_speed: float, push_direction: Vector3, _impact_point: Vector3) -> bool:
+	if not multiplayer.is_server():
+		return false
+	if hybrid_reactions_enabled and hybrid:
+		return queue_hybrid_impact(push_direction.normalized() * approach_speed, push_direction.normalized())
 	if disabled or approach_speed < disabling_impact_speed:
 		return false
 	disabled = true
@@ -601,6 +834,8 @@ func disable_from_impact(approach_speed: float, push_direction: Vector3, _impact
 	return true
 
 func push_from_truck(push_direction: Vector3, truck_speed: float, _impact_point: Vector3) -> void:
+	if hybrid_reactions_enabled and hybrid:
+		return # Grounded rollovers remain anchored; flight has its own launch velocity.
 	if not disabled or truck_speed <= 0.0:
 		return
 	var direction := Vector3(push_direction.x,0.0,push_direction.z).normalized()
@@ -625,6 +860,14 @@ func randomize_tumble() -> void:
 func boost_bounce(direction: Vector3, truck_speed: float) -> bool:
 	if not disabled or exploded or bounce_cooldown > 0.0:
 		return false
+	if hybrid_reactions_enabled and hybrid:
+		if hybrid.state != hybrid.State.FLIGHT:
+			return false
+		bounce_cooldown = 0.3
+		hybrid.velocity = direction.normalized() * clampf(truck_speed * 1.25, 18, 42) + Vector3.UP * 9
+		linear_velocity = hybrid.velocity
+		incoming_velocity = hybrid.velocity
+		return true
 	bounce_cooldown = 0.3
 	sleeping = false
 	linear_velocity = direction.normalized() * clampf(truck_speed * 1.25, 18.0, 42.0) + Vector3.UP * 9.0
@@ -633,12 +876,16 @@ func boost_bounce(direction: Vector3, truck_speed: float) -> bool:
 	return true
 
 func explode() -> void:
+	if exploded:
+		return
 	exploded = true
 	if is_instance_valid(horn_player):
 		horn_player.stop()
 	collision_layer = 0
 	collision_mask = 0
 	$VehicleLights.visible = false
+	if hybrid_reactions_enabled and hybrid:
+		$Visual.hide()
 	for mesh in $Visual.find_children("*", "MeshInstance3D", true, false):
 		mesh.material_overlay = null
 	preload("res://explosion_card.gd").spawn(get_tree().current_scene, global_position + Vector3.UP * 1.8, 9.0)
@@ -684,35 +931,7 @@ func snap_collision_to_ground() -> void:
 	global_position.y = required_y + 0.025
 
 func configure_impact_smoke() -> void:
-	var smoke := $ImpactSmoke as GPUParticles3D
-	var motion := ParticleProcessMaterial.new()
-	motion.direction = Vector3.UP
-	motion.spread = 25.0
-	motion.initial_velocity_min = 0.6
-	motion.initial_velocity_max = 1.6
-	motion.gravity = Vector3(0.0, 0.25, 0.0)
-	motion.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
-	motion.emission_sphere_radius = 0.28
-	var fade := Gradient.new()
-	fade.set_color(0, Color(1.0, 1.0, 1.0, 0.0))
-	fade.add_point(0.2, Color(1.0, 1.0, 1.0, 0.6))
-	fade.set_color(2, Color(1.0, 1.0, 1.0, 0.0))
-	var ramp := GradientTexture1D.new()
-	ramp.gradient = fade
-	motion.color_ramp = ramp
-	smoke.process_material = motion
-	var puff := SphereMesh.new()
-	puff.radius = 0.38
-	puff.height = 0.76
-	puff.radial_segments = 8
-	puff.rings = 4
-	var soot := StandardMaterial3D.new()
-	soot.albedo_color = Color(0.31, 0.33, 0.34, 0.45)
-	soot.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	soot.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	soot.vertex_color_use_as_albedo = true
-	puff.material = soot
-	smoke.draw_pass_1 = puff
+	preload("res://hybrid_disabled_cue.gd").configure_smoke($ImpactSmoke)
 
 func fade_visuals(node: Node, amount: float) -> void:
 	if node is MeshInstance3D:
@@ -767,6 +986,8 @@ func update_impact_springs(delta: float) -> void:
 			spring_skeleton.set_bone_pose_position(bone,crumple_rest_positions[index] + Vector3(0.0,0.0,inward * crumple_depths[index]))
 
 func apply_chassis_suspension_pose() -> void:
+	if hybrid_reactions_enabled and hybrid:
+		return
 	if spring_bones.size() != 5 or spring_bones[0] < 0:
 		return
 	var chassis := spring_bones[0]
@@ -895,7 +1116,7 @@ func update_police_chase(delta: float) -> void:
 	if absf(error) > PI * 0.6:
 		desired = 0.55 * signf(error)
 	steering_angle = move_toward(steering_angle, desired, 1.2 * delta)
-	update_drive_speed(minf(28.0, maxf(12.0, absf(truck.speed) + 4.0)), delta)
+	update_drive_speed(0.0 if hybrid_pending_strength > 0 else minf(28.0, maxf(12.0, absf(truck.speed) + 4.0)), delta)
 	var yaw := current_driving_speed / wheelbase * tan(steering_angle) * delta
 	var heading := rotation.y + yaw * 0.5
 	var movement := Vector3(sin(heading), 0, cos(heading)) * current_driving_speed * delta

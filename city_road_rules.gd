@@ -1,5 +1,28 @@
 extends RefCounted
 
+static func perpendicular_crosswalk(city: Node3D, intersection: Vector3) -> bool:
+	var column := roundi((intersection.x + 128.0) / 64.0)
+	var row := roundi((intersection.z + 80.0) / 64.0)
+	if column < 0 or column > 4 or row < 0 or row > 3: return false
+	return ((column * 4 + row + 1) * 7) % 20 < roundi(20.0 * city.multi_crosswalk_fraction)
+
+static func has_approach_crosswalk(city: Node3D, axis: Vector3, intersection: Vector3) -> bool:
+	if city.crosswalk_scene == null: return false
+	if intersection.z < -80.0 or intersection.z > 112.0: return false
+	# The generated stripes cross the west and (when selected) south arms.
+	if absf(axis.z) > 0.5: return axis.z > 0 and perpendicular_crosswalk(city, intersection)
+	return axis.x > 0
+
+static func approach_edge(city: Node3D, axis: Vector3, intersection: Vector3) -> float:
+	var vertical := absf(axis.z) > 0.5
+	return city.road_width * 0.5 + extra_width(not vertical, intersection.z if vertical else intersection.x, -axis.z if vertical else -axis.x)
+
+static func stop_boundary(city: Node3D, axis: Vector3 = Vector3.ZERO, intersection: Vector3 = Vector3.ZERO) -> float:
+	if axis == Vector3.ZERO or has_approach_crosswalk(city, axis, intersection):
+		return maxf(city.stop_line_setback, city.crosswalk_setback + 4.5)
+	# One metre between the junction asphalt edge and the near edge of the bar.
+	return approach_edge(city, axis, intersection) + 1.0 + 0.21
+
 # Stable street rules are shared by geometry, traffic and multiplayer maps.
 static func one_way(vertical: bool, coordinate: float) -> int:
 	if vertical and is_equal_approx(coordinate, -64.0): return 1
@@ -36,7 +59,13 @@ static func paint(city: Node3D, road: Node3D, vertical: bool, coordinate: float,
 	road.set_meta("road_type", "one_way" if direction != 0 else ("passing" if passing else "double_yellow"))
 	road.set_meta("one_way_direction", direction)
 	for along in range(-floori(city.road_visual_extent), floori(city.road_visual_extent)):
-		if city.near_street(along + 0.5, crosses, maxf(city.road_width * 0.5 + 3.0, city.stop_line_setback + 2.0)): continue
+		var blocked := false
+		for cross in crosses:
+			var junction := Vector3(coordinate, 0, cross) if vertical else Vector3(cross, 0, coordinate)
+			var sign := 1.0 if along + 0.5 < cross else -1.0
+			var axis := Vector3(0, 0, sign) if vertical else Vector3(sign, 0, 0)
+			if absf(along + 0.5 - cross) < stop_boundary(city, axis, junction) + 0.85: blocked = true
+		if blocked: continue
 		for side in ([0.0] if direction != 0 else [-1.0, 1.0]):
 			var dashed: bool = direction != 0 or (passing and side == passing_side)
 			if dashed and posmod(along, 8) >= 3: continue
@@ -147,13 +176,15 @@ static func paint_approaches(city: Node3D, road: Node3D, vertical: bool, coordin
 			var right := Vector2(-axis.z, axis.x)
 			var junction := Vector2(0, cross) if vertical else Vector2(cross, 0)
 			var split := extra_width(vertical, coordinate, -axis.z if vertical else axis.x) > 0
-			arrow(city, road, surface, junction - axis2 * 24.0 + right * 4.0, axis2, kind in ["left", "straight_left"], kind != "left")
+			var boundary := stop_boundary(city, axis, intersection)
+			var arrow_distance := maxf(24.0, boundary + 3.5)
+			arrow(city, road, surface, junction - axis2 * arrow_distance + right * 4.0, axis2, kind in ["left", "straight_left"], kind != "left")
 			if one_way(vertical, coordinate) != 0:
 				var left_kind := approach_kind(axis, intersection, -4)
-				arrow(city, road, surface, junction - axis2 * 24.0 - right * 4.0, axis2, left_kind in ["left", "straight_left"], left_kind != "left")
+				arrow(city, road, surface, junction - axis2 * arrow_distance - right * 4.0, axis2, left_kind in ["left", "straight_left"], left_kind != "left")
 			if split:
-				arrow(city, road, surface, junction - axis2 * 24.0 + right * 8.5, axis2, false, true)
-				for along in range(13, 33):
+				arrow(city, road, surface, junction - axis2 * arrow_distance + right * 8.5, axis2, false, true)
+				for along in range(ceili(boundary + 0.21 + 0.35), 33):
 					if along < 21 or along % 6 < 3:
 						quad(city, road, surface, junction - axis2 * along + right * 6.2, junction - axis2 * (along + 1) + right * 6.2, 0.15)
 	if not marked: return

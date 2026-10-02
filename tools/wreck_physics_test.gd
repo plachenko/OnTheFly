@@ -9,6 +9,7 @@ func run() -> void:
 	current_scene = scene
 	await process_frame
 	var car = scene.get_node("ProceduralCity/Traffic").get_child(0)
+	car.hybrid_reactions_enabled = false # Explicit regression coverage for rigid-body fallback.
 	car.set_physics_process(false)
 	assert(car.disable_from_impact(12.0, Vector3.FORWARD, car.global_position))
 	assert(car.linear_velocity.y >= 5.5 and car.linear_velocity.z < -7.0)

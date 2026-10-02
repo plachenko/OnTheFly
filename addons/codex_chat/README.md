@@ -110,3 +110,35 @@ an instruction. Images must be absolute paths inside the project. Actions
 `interrupt` and `refresh` are also supported. Duplicate IDs are ignored, and
 prompts wait until the dock is connected and idle. Enable this only when you
 intend another authorized session to relay your instructions.
+
+## Desktop voice requests through MCP
+
+The desktop app can call a local MCP adapter that forwards your instructions to
+this dock's existing inbox. Remote host pairing codes are not a registration
+mechanism for this Godot plugin. The Termux code above remains separate.
+
+1. Open Godot, click Connect in the Codex dock, and enable **Allow desktop requests**.
+2. In desktop Settings > MCP servers > Add server, choose STDIO, name it
+   `godot-codex`, and use your Node.js executable as the command.
+3. Add the absolute path to `addons/codex_chat/desktop_mcp.mjs` as the first
+   argument. Optionally add the project directory as the second argument;
+   otherwise the adapter uses the project containing the script.
+4. Save and restart the MCP connection as prompted. Ask the desktop chat to
+   read `godot_status`, then send your authorized request using `godot_prompt`.
+   Voice can provide the request when the desktop voice session supports tool use.
+
+For this project the script path is:
+`C:/Users/Shadow/Documents/OnTheFly/Food_Truck_Drive/addons/codex_chat/desktop_mcp.mjs`.
+Node.js 18 or later is required for this adapter; the Godot dock still runs without Node.
+
+Tools: `godot_status`, `godot_prompt`, `godot_interrupt`, `godot_refresh`.
+The adapter rejects stale editor status, disabled inboxes, busy prompt submission,
+and overwriting pending requests. A returned request ID means queued, not completed.
+Check status for `last_request` acknowledgement, busy state and transcript results.
+Godot approvals still appear in the Godot dock. This does not merge the two chats
+or stream microphone audio into Godot. It requires both clients to access the same
+local project files. No cloud endpoint, account credential or desktop modification
+is introduced. Local programs with project filesystem access can also write this
+inbox; the checkbox is consent to local relay, not an authentication boundary.
+
+Official interface: https://learn.chatgpt.com/docs/extend/mcp?surface=cli

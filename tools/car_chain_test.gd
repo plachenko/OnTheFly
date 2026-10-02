@@ -14,6 +14,7 @@ func run() -> void:
 	var cars: Array = []
 	for index in 3:
 		var car = city.traffic_car_scene.instantiate()
+		car.hybrid_reactions_enabled = false # Legacy rigid-body chain fallback.
 		car.model_scene = load(city.traffic_car_models[0])
 		car.parked = true
 		traffic.add_child(car)

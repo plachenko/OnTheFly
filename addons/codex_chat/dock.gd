@@ -112,8 +112,8 @@ func _ready() -> void:
 	add_child(paintover)
 	var remote_row := HBoxContainer.new()
 	add_child(remote_row)
-	remote_toggle = check(remote_row, "Allow paired-phone requests", false)
-	remote_toggle.tooltip_text = "Allows your connected desktop Codex session to relay requests from Android through a local project inbox."
+	remote_toggle = check(remote_row, "Allow desktop requests", false)
+	remote_toggle.tooltip_text = "Allows an authorized desktop Codex session or MCP adapter to send requests through the local project inbox."
 	button(remote_row, "Phone setup", func(): OS.shell_open("https://learn.chatgpt.com/docs/remote-connections"))
 	prompt = TextEdit.new()
 	prompt.placeholder_text = "Ask Codex…  Ctrl+Enter to send"
@@ -507,3 +507,4 @@ func shutdown() -> void:
 		remote_inbox.enabled = false
 		remote_inbox.publish_status()
 	if is_instance_valid(bridge): bridge.stop()
+

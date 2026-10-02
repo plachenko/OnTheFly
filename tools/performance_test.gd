@@ -49,7 +49,7 @@ func run() -> void:
 	assert(car.distant_mode)
 	assert(car.disable_from_impact(30.0, Vector3.RIGHT, car.global_position))
 	car.update_proximity_mode()
-	assert(not car.distant_mode and not car.freeze and car.collision_layer != 0)
+	assert(not car.distant_mode and car.freeze and car.hybrid.state == car.hybrid.State.FLIGHT and car.collision_layer != 0)
 	var legacy: Dictionary
 	var optimized: Dictionary
 	for enabled in [false, true]:
