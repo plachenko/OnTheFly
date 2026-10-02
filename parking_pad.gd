@@ -21,11 +21,14 @@ var expired: bool = false
 var patrons: Array = []
 var fee_elapsed: float = 0.0
 var charged_initial_fee: bool = false
+var wave_managed := false
+var last_sign_state: Array = []
 
 func _ready() -> void:
 	if has_node("ServiceSurface"):
 		var glow := ShaderMaterial.new()
 		glow.shader = preload("res://service_glow.gdshader")
+		glow.set_shader_parameter("parking_ticks", true)
 		glow.set_shader_parameter("glow_strength", glow_strength)
 		$ServiceSurface.material_override = glow
 		glow.set_shader_parameter("glow_color", expired_glow_color if expired else available_glow_color)
@@ -37,9 +40,17 @@ func _ready() -> void:
 	refresh_service_sign()
 	if has_node("WorldMeter"):
 		$WorldMeter/WorldBar.texture=$WorldMeter/DisplayViewport.get_texture()
+		$WorldMeter/DisplayViewport.render_target_update_mode = SubViewport.UPDATE_WHEN_VISIBLE
+		$WorldMeter/WorldBar.visibility_range_end = 90.0
+	if has_node("ServiceSign"): $ServiceSign.visibility_range_end = 120.0
 
 func tick_service(delta: float, shop_open: bool, open_at_pad: bool = false) -> void:
 	if not serving_enabled:return
+	if wave_managed:
+		if open_at_pad and not expired:
+			get_parent().get_parent().service_waves.mark_used(self)
+		refresh_service_sign()
+		return
 	if not get_parent().get_parent().has_ingredients():shop_open=false
 	if shop_open:service_started=true
 	if service_started and not expired:
@@ -59,10 +70,19 @@ func meter_percent() -> float:
 	return clampf(service_remaining/maxf(.1,serving_duration)*100.0,0.0,100.0)
 
 func meter_text() -> String:
+	if wave_managed and expired:
+		return "SERVICE CLOSED • Repair or restock for the next wave"
 	return "RED PAD • FEE $%d EVERY %ds"%[expired_fee,ceili(expired_fee_interval)] if expired else "SERVING WINDOW  •  %ds remaining"%ceili(service_remaining)
 
 func refresh_service_sign() -> void:
 	var needs_ingredients: bool = not Engine.is_editor_hint() and serving_enabled and not get_parent().get_parent().has_ingredients()
+	var wave_state: Array = []
+	if wave_managed:
+		var waves: Node = get_parent().get_parent().service_waves
+		if waves != null: wave_state = [waves.initialized, waves.in_service, ceili(waves.remaining), waves.rotation.has(self)]
+	var state: Array = [expired, service_started, serving_enabled, needs_ingredients, ceili(service_remaining), roundi(meter_percent()), glow_strength, available_glow_color, expired_glow_color, wave_state]
+	if state == last_sign_state: return
+	last_sign_state = state
 	if has_node("ServiceSurface"):
 		var glow := $ServiceSurface.material_override as ShaderMaterial
 		glow.set_shader_parameter("glow_color", expired_glow_color if expired else available_glow_color)
@@ -76,6 +96,13 @@ func refresh_service_sign() -> void:
 		display.value=meter_percent()
 		$WorldMeter/DisplayViewport/Time.text="FEE $%d / %ds"%[expired_fee,ceili(expired_fee_interval)] if expired else "%ds"%ceili(service_remaining)
 		display.add_theme_stylebox_override("fill",display.get_meta("red_fill") if expired else display.get_meta("green_fill"))
+	if wave_managed and expired:
+		var waves: Node = get_parent().get_parent().service_waves
+		var message := "BAY RETIRED" if waves.initialized and not waves.rotation.has(self) else "SERVICE CLOSED"
+		if waves.initialized and not waves.in_service and waves.rotation.has(self):
+			message = "NEXT WAVE\n%ds" % ceili(waves.remaining)
+		if has_node("ServiceSign"): $ServiceSign.text = message
+		if has_node("WorldMeter"): $WorldMeter/DisplayViewport/Time.text = "CLOSED"
 
 func release_patron(patron: Node) -> void:
 	patrons.erase(patron)

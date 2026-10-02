@@ -1,4 +1,4 @@
-# OnTheFly — Street Kitchen
+# OnTheFly
 
 A Godot 4.7.2 food-truck driving game. The main menu offers the original
 playground and a procedurally generated hilly city with traffic, serving pads,
@@ -38,7 +38,7 @@ the same tap/hold keyboard control. Holding does not also take a screenshot.
 The console reports when video recording starts, its buffered duration, and
 the saved file path when recording ends.
 Clips save under `user://videos` beside `user://screenshots`; on Windows this
-is `%APPDATA%/Godot/app_userdata/Street Kitchen — Truck Playground/videos`.
+is `%APPDATA%/Godot/app_userdata/OnTheFly/videos`.
 The on-screen REC indicator shows total clip duration. Closing the game normally
 also finalizes an active clip. Immediately after launch, only the available
 buffer is included. Recording continues through pauses and scene changes.

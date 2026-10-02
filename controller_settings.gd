@@ -39,7 +39,7 @@ func _ready() -> void:
 	$Layout/RepairPanel/MidFix.pressed.connect(func(): get_parent().buy_repair(2))
 	$Layout/RepairPanel/Ingredients.pressed.connect(func(): get_parent().buy_ingredients())
 	$Layout/RoundEndPanel/Restart.pressed.connect(restart_round)
-	$Layout/RoundEndPanel/MainMenu.pressed.connect(func(): get_node("/root/GameOptions").round_balance=get_parent().money; get_tree().paused=false; get_tree().change_scene_to_file("res://main_menu.tscn"))
+	$Layout/RoundEndPanel/MainMenu.pressed.connect(return_to_menu)
 	$Layout/RoundEndPanel/Quit.pressed.connect(func(): get_tree().quit())
 	$Layout/RepairPanel/RepairsTab.pressed.connect(func(): upgrade_tab=false)
 	$Layout/RepairPanel/UpgradesTab.pressed.connect(func(): upgrade_tab=true)
@@ -136,7 +136,7 @@ func _process(_delta: float) -> void:
 		var progress=$Layout/PadMeter/Progress
 		progress.value=displayed_pad.meter_percent()
 		progress.add_theme_stylebox_override("fill",progress.get_meta("red_fill") if displayed_pad.expired else progress.get_meta("green_fill"))
-		$Layout/PadMeter/Fee.text="$%d total fees this round • Close shop or move"%level.total_pad_fees if displayed_pad.expired else "The serving window keeps draining after you open."
+		$Layout/PadMeter/Fee.text="Windows start with the wave • Arrive before time runs out" if displayed_pad.wave_managed else ("$%d total fees this round • Close shop or move"%level.total_pad_fees if displayed_pad.expired else "The serving window keeps draining after you open.")
 	else:$Layout/PadMeter.hide()
 	var pad_status="Park on green and open the kitchen."
 	if is_instance_valid(truck.parking_pad) and truck.parking_pad!=level.repair_pad:
@@ -192,7 +192,19 @@ func _process(_delta: float) -> void:
 	$Layout/RoundEndPanel/Summary.text="%s\nEarned $%d / $%d target\nBalance $%d   •   Time left %d:%02d"%["Money target reached!" if level.round_won else "Time ran out before the money target.",level.money_earned,level.earnings_target,level.money,seconds/60,seconds%60]
 
 func restart_round() -> void:
+	if get_parent().has_method("request_restart"):
+		get_tree().paused=false
+		get_parent().request_restart()
+		return
 	get_node("/root/GameOptions").round_balance=get_parent().money
 	get_tree().paused=false
 	var current_level: String = get_tree().current_scene.scene_file_path
 	get_tree().change_scene_to_file.call_deferred(current_level if not current_level.is_empty() else "res://main.tscn")
+
+func return_to_menu() -> void:
+	if NetworkSession.active:
+		NetworkSession.leave()
+		return
+	GameOptions.round_balance=get_parent().money
+	get_tree().paused=false
+	get_tree().change_scene_to_file("res://main_menu.tscn")

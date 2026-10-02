@@ -1,5 +1,4 @@
 extends Node3D
-const CITY_SCENE: PackedScene = preload("res://procedural_city.tscn")
 @export var pan_distance: float = .35
 @export var pan_speed: float = .22
 @export var camera_origin: Vector3 = Vector3(-15,3.2,2.2)
@@ -10,9 +9,45 @@ var starting: bool = false
 var transition_elapsed: float = 0.0
 var start_pan: float = 0.0
 var start_city: bool = false
+var multiplayer_dialog: ConfirmationDialog
 @onready var level=$Level
 @onready var options_panel = $Menu/OptionsPanel
 func _ready() -> void:
+    var updates=Button.new()
+    updates.text="Updates"
+    updates.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+    updates.offset_left=-180
+    updates.offset_right=-25
+    updates.offset_top=-82
+    updates.offset_bottom=-38
+    $Menu.add_child(updates)
+    updates.pressed.connect(open_updater)
+    multiplayer_dialog=preload("res://multiplayer_menu.gd").new()
+    add_child(multiplayer_dialog)
+    $Menu/Actions.offset_top=190
+    $Menu/Actions.offset_bottom=720
+    for spec in [["HostGame","Host multiplayer",true],["JoinGame","Join multiplayer",false]]:
+        var button=Button.new()
+        button.name=spec[0]
+        button.text=spec[1]
+        button.add_theme_font_size_override("font_size",22)
+        button.pressed.connect(multiplayer_dialog.open.bind(spec[2]))
+        $Menu/Actions.add_child(button)
+    var lab=Button.new()
+    lab.name="PerformanceLab"
+    lab.text="Performance lab"
+    lab.add_theme_font_size_override("font_size",22)
+    lab.pressed.connect(func(): LoadingScreen.load_scene("res://performance_lab.tscn"))
+    $Menu/Actions.add_child(lab)
+    var action_names=["NewGame","ProceduralCity","HostGame","JoinGame","PerformanceLab","Options","Quit"]
+    for index in action_names.size():
+        var button=$Menu/Actions.get_node(action_names[index])
+        button.position=Vector2(25,87+index*62)
+        button.size=Vector2(285,48)
+    $Menu/Actions/NewGame.text="Single player"
+    if not NetworkSession.last_error.is_empty():
+        $Menu/Footer.text=NetworkSession.last_error
+        NetworkSession.last_error=""
     level.set_process(false)
     level.set_process_unhandled_input(false)
     level.truck.set_physics_process(false)
@@ -36,6 +71,24 @@ func _ready() -> void:
     options_panel.visible=false
     update_labels()
     $Menu/Actions/NewGame.grab_focus()
+func open_updater() -> void:
+    var script_path=OS.get_executable_path().get_base_dir().path_join("Update_Game.ps1")
+    var dialog=ConfirmationDialog.new()
+    dialog.title="Game updates"
+    dialog.dialog_text="Close the game and open the launcher to check for updates?"
+    dialog.ok_button_text="Exit and check"
+    add_child(dialog)
+    if OS.has_feature("editor") or OS.get_name()!="Windows" or not FileAccess.file_exists(script_path):
+        dialog.dialog_text="Launch the exported game using Launch_OnTheFly.cmd to check for updates."
+        dialog.ok_button_text="OK"
+        dialog.confirmed.connect(dialog.queue_free)
+    else:
+        dialog.confirmed.connect(func():
+            var process_id=OS.create_process("powershell.exe",PackedStringArray(["-NoProfile","-STA","-WindowStyle","Hidden","-ExecutionPolicy","Bypass","-File",script_path,"-CheckOnOpen"]))
+            if process_id>0:get_tree().quit()
+            else:dialog.dialog_text="Could not open the launcher. Open Launch_OnTheFly.cmd from the game folder.";dialog.popup_centered())
+    dialog.canceled.connect(dialog.queue_free)
+    dialog.popup_centered(Vector2i(540,180))
 func show_options(showing: bool) -> void:
     if showing:get_node("/root/GameOptions").sync_video_audio(options_panel)
     options_panel.visible=showing
@@ -79,21 +132,22 @@ func start_game(procedural: bool = false) -> void:
     level.carried_balance=false
     bank.round_balance=level.money
     starting=true
+    get_node("/root/LoadingScreen").begin_cover()
     start_pan=sin(elapsed*pan_speed)*pan_distance
     $Menu.hide()
     get_viewport().gui_release_focus()
+    set_process(false)
+    finish_start.call_deferred()
 
 func finish_start() -> void:
     if start_city:
-        var city_level = CITY_SCENE.instantiate()
-        get_tree().root.add_child(city_level)
-        var city_camera: Camera3D = city_level.get_node("FollowCamera")
-        city_camera.global_transform=$MenuCamera.global_transform
-        city_level.set("camera_started",true)
-        city_camera.make_current()
-        get_tree().current_scene=city_level
-        city_level.get_node("HUD").refresh_options()
-        queue_free()
+        set_process(false)
+        var loaded: bool = await get_node("/root/LoadingScreen").load_scene("res://procedural_city.tscn", $MenuCamera.global_transform)
+        if not loaded:
+            starting = false
+            transition_elapsed = 0.0
+            $Menu.show()
+            set_process(true)
         return
     set_process(false)
     level.camera.global_transform=$MenuCamera.global_transform
@@ -108,6 +162,7 @@ func finish_start() -> void:
     level.get_node("HUD").refresh_options()
     level.get_node("HUD").set_process(true)
     level.get_node("HUD").set_process_input(true)
+    await get_node("/root/LoadingScreen").finish_cover()
     queue_free()
 func _unhandled_input(event: InputEvent) -> void:
     if event.is_action_pressed("ui_cancel") and options_panel.visible:

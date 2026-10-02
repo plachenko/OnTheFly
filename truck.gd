@@ -1,6 +1,24 @@
 extends CharacterBody3D
 
 var speed: float = 0.0
+var manual_controls_enabled: bool = true
+var network_controlled := false
+var network_controls: Dictionary = {}
+var network_edges: Dictionary = {}
+
+func control_axis(negative: String, positive: String) -> float:
+    if network_controlled:
+        return float(network_controls.get(positive, 0.0)) - float(network_controls.get(negative, 0.0))
+    return Input.get_axis(negative, positive)
+
+func control_strength(action: String) -> float:
+    return float(network_controls.get(action, 0.0)) if network_controlled else Input.get_action_strength(action)
+
+func control_pressed(action: String) -> bool:
+    return control_strength(action) > 0.5 if network_controlled else Input.is_action_pressed(action)
+
+func control_just_pressed(action: String) -> bool:
+    return network_edges.get(action, false) if network_controlled else Input.is_action_just_pressed(action)
 var deployed: bool = false
 var opening: float = 0.0
 var steer: float = 0.0
@@ -37,6 +55,13 @@ var lateral_accel: float = 0.0
 @export var braking_force: float = 22.0
 @export var rolling_drag: float = 2.3
 @export var cone_push_strength: float = 2.0
+@export_category("Parking Power Slide")
+@export var power_slide_min_speed: float = 3.5
+@export var power_slide_duration: float = 1.2
+var power_slide_active: bool = false
+var power_slide_blend: float = 0.0
+var power_slide_elapsed: float = 0.0
+var power_slide_used: bool = false
 @export_category("Hill Jump")
 @export_range(5.0, 25.0, 0.5) var hill_jump_min_speed: float = 13.0
 @export_range(0.05, 0.5, 0.01) var hill_jump_crest_height: float = 0.20
@@ -44,6 +69,9 @@ var lateral_accel: float = 0.0
 @export_range(0.5, 4.0, 0.1) var hill_jump_cooldown_seconds: float = 1.8
 var hill_jump_cooldown: float = 0.0
 var hill_jump_active: bool = false
+@export_range(0.5, 4.0, 0.1) var hill_jump_min_upward_momentum: float = 1.5
+var uphill_momentum: float = 0.0
+var slope_upward_speed: float = 0.0
 var spawn_transform: Transform3D
 var message: String = ""
 var message_timer: float = 0.0
@@ -130,13 +158,16 @@ func _physics_process(delta: float) -> void:
     message_timer = maxf(0.0, message_timer - delta)
     if not round_over and health > 0.0 and health/max_health < critical_health_ratio:
         health = maxf(0.0,health-critical_health_drain*delta)
-    if Input.is_action_just_pressed("reset"):
+    if control_just_pressed("reset"):
         reset_truck()
         previous_speed = speed
     var servicing = get_parent().has_method("can_repair") and get_parent().can_repair()
-    if Input.is_action_just_pressed("serve") and not servicing:
+    if manual_controls_enabled and control_just_pressed("serve") and not servicing:
         if absf(speed) < 0.5:
-            if not deployed and not get_parent().has_ingredients():
+            if not deployed and not get_parent().can_open_shop(self):
+                message = "Service closed or bay occupied — race to an available green bay."
+                message_timer = 3.0
+            elif not deployed and not get_parent().has_ingredients():
                 message = "Need ingredients to unlock serving — restock at the service station."
                 message_timer = 3.0
             else:
@@ -144,15 +175,15 @@ func _physics_process(delta: float) -> void:
         else:
             message = "Stop the truck before opening the kitchen."
             message_timer = 2.5
-    var throttle = Input.get_axis("reverse", "accelerate")
-    var steering_input = clampf(Input.get_axis("right", "left")*steering_sensitivity,-1.0,1.0)
+    var throttle = control_axis("reverse", "accelerate") if manual_controls_enabled else 0.0
+    var steering_input = clampf(control_axis("right", "left")*steering_sensitivity,-1.0,1.0) if manual_controls_enabled else 0.0
     if turn_signal != 0:
         if absf(angle_difference(signal_start_heading,rotation.y)) > 0.65:
             signal_turn_completed = true
         if signal_turn_completed and absf(steering_input) < 0.12:
             turn_signal = 0
             signal_turn_completed = false
-    var brake_amount = Input.get_action_strength("brake")
+    var brake_amount = control_strength("brake") if manual_controls_enabled else 0.0
     var braking = brake_amount > 0.0
     var can_drive = health>0.0 and not round_over and not deployed and opening<.02
     if fsd_enabled:
@@ -170,12 +201,13 @@ func _physics_process(delta: float) -> void:
                 brake_amount = command.brake
                 braking = brake_amount > 0.0
                 steering_input = command.steer
-    boost_active = booster_owned and boost_fuel>0.0 and Input.is_action_pressed("boost") and throttle>0.0 and not braking and can_drive
+    boost_active = booster_owned and boost_fuel>0.0 and control_pressed("boost") and throttle>0.0 and not braking and can_drive
     if boost_active:
         boost_fuel = maxf(0.0,boost_fuel-boost_consumption*delta)
     var speed_bonus = boost_speed_multiplier if boost_active else 1.0
     var accel_bonus = boost_acceleration_multiplier if boost_active else 1.0
-    var drifting = drift_owned and braking and absf(steering_input)>.12 and (absf(speed)>2.0 or absf(throttle)>0.0) and can_drive
+    update_power_slide(brake_amount, steering_input, throttle, can_drive and manual_controls_enabled and is_on_floor(), delta)
+    var drifting = drift_owned and not power_slide_active and braking and absf(steering_input)>.12 and (absf(speed)>2.0 or absf(throttle)>0.0) and can_drive
     var powered_drift = drifting and absf(throttle)>0.0
     var was_stationary_drifting = stationary_drifting
     stationary_drifting = powered_drift and (stationary_drifting or absf(speed)<.5)
@@ -195,7 +227,7 @@ func _physics_process(delta: float) -> void:
     if stationary_drifting:
         speed=0.0
     elif braking:
-        var brake_grip = .18*damage_performance() if powered_drift else (.36 if drifting else 1.0)
+        var brake_grip = .32 if power_slide_active else (.18*damage_performance() if powered_drift else (.36 if drifting else 1.0))
         speed = move_toward(speed, 0.0, braking_force * brake_amount * delta * brake_grip)
         if powered_drift:
             var drift_target = forward_speed if throttle>0.0 else -reverse_speed
@@ -213,7 +245,7 @@ func _physics_process(delta: float) -> void:
     $VehicleLights.headlights_enabled = headlights_on
     $VehicleLights.set_driving_lights(braking or decelerating or deployed, speed < -0.25, turn_signal < 0, turn_signal > 0, hazards_on)
     var steering_limit = lerpf(.48, .23, clampf(absf(speed) / 15.0, 0.0, 1.0))
-    steer = move_toward(steer, steering_input * steering_limit, delta * 2.5)
+    steer = move_toward(steer, steering_input * lerpf(steering_limit, 0.58, power_slide_blend), delta * 2.5)
     # Throttle can break rear traction and rotate the truck from a standstill.
     var turn_direction = signf(speed) if absf(speed)>.5 else signf(throttle)
     var turn_speed = turn_direction*maxf(absf(speed),4.0*absf(throttle)) if powered_drift else speed
@@ -221,11 +253,15 @@ func _physics_process(delta: float) -> void:
         pivot_about_front_axle(steering_input*signf(throttle)*stationary_drift_turn_speed*delta)
         travel_heading=rotation.y
     else:
-        rotation.y += steer * turn_speed / 5.0 * delta * (1.0+drift_blend*.65)
-    travel_heading = lerp_angle(travel_heading,rotation.y,1.0-exp(-lerpf(18.0,3.5,drift_blend)*delta))
+        rotation.y += steer * turn_speed / 5.0 * delta * (1.0+drift_blend*.65) * lerpf(1.0, 4.5, power_slide_blend)
+    var traction_response := lerpf(lerpf(18.0,3.5,drift_blend), 0.65, power_slide_blend)
+    travel_heading = lerp_angle(travel_heading,rotation.y,1.0-exp(-traction_response*delta))
     var forward = Vector3(-sin(travel_heading),0,-cos(travel_heading))
     velocity.x = forward.x * speed
     velocity.z = forward.z * speed
+    update_uphill_momentum(forward, delta)
+    if velocity.y > 0.0 and not hill_jump_active:
+        velocity.y = minf(velocity.y, slope_upward_speed if is_on_floor() else 0.0)
     try_hill_jump(forward)
     if not is_on_floor():
         velocity.y -= 20.0 * delta
@@ -238,6 +274,7 @@ func _physics_process(delta: float) -> void:
         if car_body.has_method("disable_from_impact"):
             var car_approach: float = maxf(0.0,-motion.normalized().dot(car_sweep.get_normal())*absf(speed))
             if car_body.disable_from_impact(car_approach,forward*signf(speed),car_sweep.get_position()):
+                PoliceDispatch.report_collision(car_body)
                 take_damage(car_approach*0.6)
                 speed *= 0.35
                 velocity.x = forward.x*speed
@@ -249,7 +286,22 @@ func _physics_process(delta: float) -> void:
             try_boost_break(upcoming.get_collider(),upcoming.get_normal(),forward)
     try_climb_obstacle(motion)
     var landing_speed := maxf(0.0,-velocity.y)
+    var was_grounded := is_on_floor()
+    var approved_upward_speed := maxf(0.0, velocity.y)
     move_and_slide()
+    # The solver may redirect horizontal collisions upward. Only terrain
+    # momentum at driving speed may turn that into an airborne launch.
+    if velocity.y > 0.0:
+        if hill_jump_active:
+            velocity.y = minf(velocity.y, approved_upward_speed)
+        elif is_on_floor():
+            velocity.y = minf(velocity.y, slope_upward_speed)
+        elif was_grounded and absf(speed) >= hill_jump_min_speed and uphill_momentum >= hill_jump_min_upward_momentum and not is_on_wall() and can_drive_on_hill():
+            velocity.y = minf(velocity.y, uphill_momentum)
+            hill_jump_active = true
+            hill_jump_cooldown = hill_jump_cooldown_seconds
+        else:
+            velocity.y = 0.0
     if hill_jump_active and is_on_floor() and velocity.y <= 0.0:
         hill_jump_active = false
         for i in 4:
@@ -258,15 +310,26 @@ func _physics_process(delta: float) -> void:
     for i in get_slide_collision_count():
         var hit = get_slide_collision(i)
         var body = hit.get_collider()
+        # A curb is ground support, even if the solver reports its vertical
+        # edge for a frame. Never turn that contact into crash damage/braking.
+        if body.get_meta("sidewalk", false) or body.get_meta("drivable_surface", false):
+            continue
         if body.has_method("disable_from_impact"):
             var car_impact: float = absf((forward*speed).dot(hit.get_normal()))
             if body.disable_from_impact(car_impact,forward*signf(speed),hit.get_position()):
+                PoliceDispatch.report_collision(body)
                 take_damage(car_impact * 0.6)
                 speed *= .55
                 continue
         var breakable = body.get_node_or_null("BoostBreakable")
         if breakable and (breakable.broken or try_boost_break(body,hit.get_normal(),forward)):
             continue
+        if body.has_method("impact_knock_down"):
+            var pole_impact = maxf(0.0, -(forward * speed).dot(hit.get_normal()))
+            if body.impact_knock_down(forward * signf(speed), pole_impact):
+                take_damage(2.0)
+                speed *= .9
+                continue
         if body.has_method("knock_down"):
             if lift_owned and absf(speed)>=3.0 and body.knock_down(forward*signf(speed),absf(speed)):
                 take_damage(2.0)
@@ -299,6 +362,10 @@ func _physics_process(delta: float) -> void:
         if vibration_enabled:
             for device in Input.get_connected_joypads():
                 Input.start_joy_vibration(device,.3,.6,.18)
+    elif strongest_impact > 0.8 and impact_cooldown <= 0.0:
+        if get_parent().has_method("trigger_impact_shake"):
+            get_parent().trigger_impact_shake(strongest_impact)
+        impact_cooldown = 0.15
     rolling += speed * delta / 0.59
     longitudinal_accel = clampf((speed-previous_speed)/delta, -18.0, 18.0)
     lateral_accel = clampf(steer * speed * speed / 5.0, -10.0, 10.0)
@@ -315,6 +382,8 @@ func take_damage(amount: float) -> void:
     health = maxf(0.0,health-maxf(0.0,amount)*(1.0-armor_reduction if armor_owned else 1.0))
     if health < previous_health and is_instance_valid(damage_effects):
         damage_effects.damage_taken()
+    if amount > 0.0 and get_parent().has_method("trigger_impact_shake"):
+        get_parent().trigger_impact_shake(amount)
 
 func effective_climb_height() -> float:
     return maxf(max_climb_height,lifted_climb_height) if lift_owned else max_climb_height
@@ -360,16 +429,16 @@ func damage_performance() -> float:
     return lerpf(damaged_speed_floor,1.0,clampf(health/max_health,0.0,1.0))
 
 func update_light_controls() -> void:
-    if Input.is_action_just_pressed("truck_headlights"):
+    if control_just_pressed("truck_headlights"):
         headlights_on = not headlights_on
-    if Input.is_action_just_pressed("truck_hazard"):
+    if control_just_pressed("truck_hazard"):
         handle_hazard_press(Time.get_ticks_msec())
-    if Input.is_action_just_pressed("truck_signal_left"):
+    if control_just_pressed("truck_signal_left"):
         hazards_on = false
         turn_signal = 0 if turn_signal == -1 else -1
         signal_start_heading = rotation.y
         signal_turn_completed = false
-    if Input.is_action_just_pressed("truck_signal_right"):
+    if control_just_pressed("truck_signal_right"):
         hazards_on = false
         turn_signal = 0 if turn_signal == 1 else 1
         signal_start_heading = rotation.y
@@ -412,6 +481,33 @@ func stop_fsd(reason: String) -> void:
     message = reason
     message_timer = 2.5
 
+func update_uphill_momentum(forward: Vector3, delta: float) -> void:
+    slope_upward_speed = 0.0
+    if is_on_floor() and can_drive_on_hill():
+        var terrain_contact := false
+        for index in get_slide_collision_count():
+            var hit := get_slide_collision(index)
+            var body = hit.get_collider()
+            if body is StaticBody3D and body.name == "HillyGround" and hit.get_normal().y > 0.5:
+                terrain_contact = true
+                break
+        if terrain_contact:
+            var normal := get_floor_normal()
+            var travel := forward * signf(speed)
+            var grade := maxf(0.0, -normal.dot(travel) / maxf(0.1, normal.y))
+            slope_upward_speed = minf(absf(speed) * grade, 6.0)
+    if absf(speed) < hill_jump_min_speed or not can_drive_on_hill():
+        uphill_momentum = 0.0
+    elif slope_upward_speed >= hill_jump_min_upward_momentum:
+        uphill_momentum = move_toward(uphill_momentum, slope_upward_speed, delta * 12.0)
+    else:
+        uphill_momentum = move_toward(uphill_momentum, 0.0, delta * 8.0)
+
+func hill_launch_speed(crest: float, approach_grade: float) -> float:
+    if absf(speed) < hill_jump_min_speed or uphill_momentum < hill_jump_min_upward_momentum or approach_grade < 0.06 or crest < hill_jump_crest_height:
+        return 0.0
+    return minf(uphill_momentum, hill_jump_impulse + clampf((absf(speed) - hill_jump_min_speed) * 0.12, 0.0, 1.5))
+
 func try_hill_jump(forward: Vector3) -> void:
     if hill_jump_cooldown > 0.0 or not is_on_floor() or absf(speed) < hill_jump_min_speed or not can_drive_on_hill():
         return
@@ -424,9 +520,10 @@ func try_hill_jump(forward: Vector3) -> void:
     var ahead: float = city.height_at(global_position.x+travel.x*sample_distance,global_position.z+travel.z*sample_distance)
     var behind: float = city.height_at(global_position.x-travel.x*sample_distance,global_position.z-travel.z*sample_distance)
     var crest := 2.0*center-ahead-behind
-    if crest < hill_jump_crest_height:
+    var launch := hill_launch_speed(crest, (center - behind) / sample_distance)
+    if launch <= 0.0:
         return
-    velocity.y = hill_jump_impulse + clampf((absf(speed)-hill_jump_min_speed)*0.12,0.0,1.5) + clampf(crest*1.5,0.0,0.8)
+    velocity.y = launch
     hill_jump_cooldown = hill_jump_cooldown_seconds
     hill_jump_active = true
 
@@ -435,23 +532,44 @@ func can_drive_on_hill() -> bool:
 
 func try_climb_obstacle(motion: Vector3) -> bool:
     var climb_limit = effective_climb_height()
-    if climb_limit <= 0.0 or not is_on_floor() or motion.length() < .001:
+    if climb_limit <= 0.0 or motion.length() < .001:
         return false
     var obstruction = KinematicCollision3D.new()
-    if not test_move(global_transform,motion,obstruction,.001):
+    if not test_move(global_transform,motion,obstruction,.001,true,8):
         return false
-    if absf(obstruction.get_normal().y) > .5 or obstruction.get_collider() is RigidBody3D:
+    var sidewalk := false
+    var side_hit := false
+    for index in obstruction.get_collision_count():
+        var body: Object = obstruction.get_collider(index)
+        if absf(obstruction.get_normal(index).y) <= .5 and not body is RigidBody3D:
+            side_hit = true
+            sidewalk = sidewalk or body.get_meta("sidewalk", false) or body.get_meta("drivable_surface", false)
+    if not side_hit:
         return false
+    if not is_on_floor():
+        # Crossing slab seams can briefly drop the floor flag; stay grounded.
+        if not sidewalk or velocity.y > 0.1 or not test_move(global_transform, Vector3.DOWN * 0.35, null, .001):
+            return false
     # Sweep the entire collision shape up, forward, then down. This checks
     # headroom and the top surface instead of assuming a ray hit is climbable.
     var lift = climb_limit + .035
     if test_move(global_transform,Vector3.UP*lift,null,.001):
         return false
     var elevated = global_transform.translated(Vector3.UP*lift)
-    if test_move(elevated,motion,null,.001):
+    # A frame's tiny motion can leave the front edge barely over the curb,
+    # causing the downward sweep to find the road instead of the sidewalk.
+    # Probe far enough onto the top while checking the whole truck for walls.
+    var step_motion := motion
+    if sidewalk:
+        var approach := 1.0
+        for index in obstruction.get_collision_count():
+            if obstruction.get_collider(index).get_meta("sidewalk", false) and absf(obstruction.get_normal(index).y) <= .5:
+                approach = minf(approach, maxf(0.25, -motion.normalized().dot(obstruction.get_normal(index))))
+        step_motion = motion.normalized() * maxf(motion.length(), 0.3 / approach)
+    if test_move(elevated,step_motion,null,.001):
         return false
     var landing = KinematicCollision3D.new()
-    var over_obstacle = elevated.translated(motion)
+    var over_obstacle = elevated.translated(step_motion)
     if not test_move(over_obstacle,Vector3.DOWN*(lift+.1),landing,.001):
         return false
     if landing.get_normal().dot(Vector3.UP) < cos(floor_max_angle):
@@ -461,7 +579,11 @@ func try_climb_obstacle(motion: Vector3) -> bool:
         return false
     global_position.y += rise + .002
     velocity.y = 0.0
-    if climb_cooldown <= 0.0:
+    if sidewalk:
+        # Ordinary curbs load the suspension without damage or loss of speed.
+        for index in 4:
+            spring_velocity[index] = maxf(-2.0, spring_velocity[index] - rise * 1.5)
+    elif climb_cooldown <= 0.0:
         var penalty = climb_damage * clampf(rise/climb_limit,.4,1.0) * clampf(absf(speed)/8.0,.5,1.5)
         take_damage(penalty)
         climb_cooldown = climb_damage_cooldown
@@ -567,10 +689,16 @@ func reset_truck() -> void:
     climb_cooldown = 0.0
     hill_jump_cooldown = 0.0
     hill_jump_active = false
+    uphill_momentum = 0.0
+    slope_upward_speed = 0.0
     opening = 0.0
     rolling = 0.0
     travel_heading = rotation.y
     drift_blend = 0.0
+    power_slide_active = false
+    power_slide_blend = 0.0
+    power_slide_used = false
+    power_slide_elapsed = 0.0
     stationary_drifting = false
     boost_active = false
     headlights_on = true
@@ -587,4 +715,21 @@ func reset_truck() -> void:
         skeleton.reset_bone_poses()
     if health <= 0.0 and get_parent().has_method("recovery_transform"):
         global_transform = get_parent().recovery_transform()
+
+
+func update_power_slide(brake: float, steering: float, throttle: float, allowed: bool, delta: float) -> void:
+    if brake < 0.2:
+        power_slide_used = false
+        power_slide_elapsed = 0.0
+    if not power_slide_active and not power_slide_used and allowed and brake > 0.5 and absf(steering) > 0.25 and absf(speed) >= power_slide_min_speed and absf(throttle) < 0.15:
+        power_slide_active = true
+        power_slide_used = true
+        power_slide_elapsed = 0.0
+        message = "POWER SLIDE — countersteer to line up; release brake to regain grip."
+        message_timer = 2.0
+    if power_slide_active:
+        power_slide_elapsed += delta
+        if not allowed or brake < 0.2 or absf(speed) < 0.7 or power_slide_elapsed >= power_slide_duration:
+            power_slide_active = false
+    power_slide_blend = move_toward(power_slide_blend, 1.0 if power_slide_active else 0.0, delta * (5.0 if power_slide_active else 2.5))
 

@@ -88,17 +88,11 @@ def rig_car(source: Path, output: Path, blend_dir: Path):
             front_zone = max(0.0, min(1.0, (0.32 - v) / 0.32))
             rear_zone = max(0.0, min(1.0, (v - 0.68) / 0.32))
             crumple_weight = 0.42 * max(front_zone, rear_zone)
-            chassis_group.add([vertex.index], 0.72 - crumple_weight, "REPLACE")
+            chassis_group.add([vertex.index], 1.0 - crumple_weight, "REPLACE")
             if front_zone > 0.0001:
                 crumple_groups["Crumple_Front"].add([vertex.index], 0.42 * front_zone, "REPLACE")
             if rear_zone > 0.0001:
                 crumple_groups["Crumple_Rear"].add([vertex.index], 0.42 * rear_zone, "REPLACE")
-            for name, weight in (("Spring_FL", (1-u)*(1-v)),
-                                 ("Spring_FR", u*(1-v)),
-                                 ("Spring_RL", (1-u)*v),
-                                 ("Spring_RR", u*v)):
-                if weight > 0.0001:
-                    groups[name].add([vertex.index], 0.28 * weight, "REPLACE")
         modifier = obj.modifiers.new("Car spring skin", "ARMATURE")
         modifier.object = armature
 

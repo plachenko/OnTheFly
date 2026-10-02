@@ -14,15 +14,20 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 
 [application]
 
-config/name="Street Kitchen — Truck Playground"
-run/main_scene="res://main_menu.tscn"
+config/name="OnTheFly"
+run/main_scene="res://startup.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 
 [autoload]
 
+LoadingScreen="*res://loading_screen.gd"
 GameOptions="*res://game_options.gd"
 ScreenshotCapture="*res://screenshot_capture.gd"
 ReplayRecorder="*res://replay_recorder.gd"
+DebugMenu="*res://debug_menu.gd"
+PoliceDispatch="*res://police_dispatch.gd"
+NetworkSession="*res://network_session.gd"
+PerformanceDiagnostics="*res://performance_diagnostics.gd"
 
 [debug]
 
@@ -35,6 +40,10 @@ window/size/viewport_height=800
 window/size/window_width_override=1280
 window/size/window_height_override=800
 window/stretch/mode="canvas_items"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/mcon_viewport/plugin.cfg", "res://addons/codex_chat/plugin.cfg")
 
 [input]
 

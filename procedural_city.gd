@@ -10,6 +10,7 @@ extends Node3D
 @export_enum("Random", "Day", "Night") var time_of_day_mode: int = 0
 @export_range(0.0, 1.0, 0.05) var night_chance: float = 0.5
 @export_range(0.0, 1.0, 0.05) var lit_window_chance: float = 0.38
+@export_range(0.0, 0.1, 0.005) var streamer_window_chance: float = 0.025
 @export_range(320.0, 1200.0, 8.0) var terrain_size: float = 960.0
 @export_range(1.0, 8.0, 1.0) var terrain_step: float = 4.0
 @export_range(0.0, 40.0, 0.5) var hill_height: float = 28.0
@@ -18,8 +19,14 @@ extends Node3D
 @export_range(120.0, 260.0, 4.0) var edge_taper_start: float = 160.0
 @export_range(280.0, 480.0, 4.0) var edge_taper_end: float = 380.0
 @export_category("City")
+@export var diagonal_roads_enabled: bool = true
+@export_range(8.0, 16.0, 1.0) var diagonal_road_width: float = 12.0
+@export var diagonal_road_segments: Array[Vector4] = [Vector4(-128, -96, -64, -32), Vector4(64, -96, 128, -32), Vector4(0, 128, 96, 192)]
+@export_range(0, 5, 1) var diagonal_plot_building_limit: int = 2
 @export_range(16.0, 20.0, 1.0) var road_width: float = 16.0
-@export_range(2.0, 5.0, 0.5) var sidewalk_width: float = 3.0
+@export_range(2.0, 5.0, 0.5) var sidewalk_width: float = 4.0
+@export_range(0.2, 0.6, 0.02) var sidewalk_height: float = 0.34
+@export_range(2.0, 6.0, 0.5) var block_corner_radius: float = 4.0
 @export_range(2.0, 8.0, 0.5) var sidewalk_slab_length: float = 4.0
 @export_range(180.0, 208.0, 1.0) var road_visual_extent: float = 192.0
 @export_range(11.0, 18.0, 0.5) var crosswalk_setback: float = 14.0
@@ -50,6 +57,10 @@ extends Node3D
 @export_range(0.0, 0.35, 0.01) var traffic_individual_speed_variation: float = 0.12
 @export_category("Street Parking")
 @export_range(0, 96, 1) var parking_bay_count: int = 60
+@export_range(3.0, 4.0, 0.1) var parking_bay_width: float = 3.4
+@export_range(10.0, 12.0, 0.2) var parking_bay_length: float = 10.0
+@export_range(1.0, 3.0, 0.1) var parking_stop_line_clearance_lengths: float = 1.0
+@export_range(0.1, 0.5, 0.05) var parking_marker_gap: float = 0.2
 @export_range(0.0, 1.0, 0.05) var parked_car_fraction: float = 0.5
 @export_range(0, 20, 1) var city_serving_bay_count: int = 8
 @export_range(20.0, 80.0, 1.0) var serving_bay_spacing: float = 42.0
@@ -120,16 +131,26 @@ var noise: FastNoiseLite
 var detail_noise: FastNoiseLite
 var rng := RandomNumberGenerator.new()
 var lighting_rng := RandomNumberGenerator.new()
+var window_lighting := preload("res://window_lighting.gd").new()
 var is_night: bool = false
 var road_material: StandardMaterial3D
 var building_material: StandardMaterial3D
 var hill_centers: Array[Vector2] = []
 var building_outward_faces: Dictionary = {}
+var lamp_gravel_points: Array[Vector2] = []
+
+@export var grass_particles_enabled: bool = true
+@export_range(0.0, 3.0, 0.1) var grass_particle_density: float = 1.0
+
+signal generation_finished
+var generating := false
 
 func _ready() -> void:
 	generate()
 
 func generate() -> void:
+	generating = true
+	set_meta("surface_height_cache", {})
 	for container in [$Terrain, $Roads, $ParkingSpaces, $ParkedCars, $HighwayApproaches, $Buildings, $NearSkyline, $Crosswalks, $StreetSigns, $Parks, $Traffic, $FogBoundary]:
 		for child in container.get_children():
 			container.remove_child(child)
@@ -161,21 +182,18 @@ func generate() -> void:
 			hill_centers.append(Vector2(hill_x+rng.randf_range(-25.0,25.0),hill_z+rng.randf_range(-25.0,25.0)))
 	road_material = make_kit_material(highway_sign_colormap_path)
 	building_material = make_kit_material(building_colormap_path)
-	make_terrain()
-	make_roads()
-	make_highway_approaches()
-	make_crosswalks()
-	make_stop_signs()
-	make_streetlights()
-	make_parks()
-	make_buildings()
-	make_near_skyline()
-	make_street_parking()
-	make_curb_markings()
-	make_sparse_block_fences()
-	make_traffic()
-	make_fog_boundary()
-	align_playable_objects()
+	var loader := get_node_or_null("/root/LoadingScreen")
+	var stages: Array[Callable] = [make_roads, make_terrain, make_parks, make_diagonal_plot_grass, make_sidewalks, make_highway_approaches, make_crosswalks, make_stop_signs, func(): preload("res://city_street_names.gd").generate(self), make_streetlights, make_buildings, make_near_skyline, make_street_parking, make_curb_markings, make_sparse_block_fences, func(): preload("res://city_power_lines.gd").generate(self), make_traffic, make_fog_boundary, align_playable_objects]
+	for index in stages.size():
+		if loader != null and loader.busy:
+			await loader.stage("Building cityâ€¦ %d%%" % int(float(index) / stages.size() * 100))
+		stages[index].call()
+	if grass_particles_enabled and grass_particle_density > 0.0:
+		if loader != null and loader.busy:
+			await loader.stage("Planting grassâ€¦")
+		preload("res://grass_particles.gd").generate(self, grass_particle_density)
+	generating = false
+	generation_finished.emit()
 
 func configure_time_of_day() -> void:
 	var level := get_parent()
@@ -203,33 +221,23 @@ func configure_time_of_day() -> void:
 	sun.light_color = Color(0.40, 0.52, 0.82)
 	sun.light_energy = 0.16
 
-func add_building_window_lights(model: Node3D, source_path: String) -> void:
+func add_building_window_lights(model: Node3D, _source_path: String) -> void:
 	if not is_night:
 		return
-	var lights_path := "res://assets/kenney_city/commercial_lights/" + source_path.get_file()
-	if not ResourceLoader.exists(lights_path):
-		return
-	var lights_scene := load(lights_path) as PackedScene
-	if not lights_scene:
-		return
-	var lights := lights_scene.instantiate() as Node3D
-	lights.name = "WindowLights"
-	model.add_child(lights)
-	var windows: Array[MeshInstance3D] = []
-	collect_window_meshes(lights, windows)
-	var lit_count := 0
-	for window in windows:
-		window.visible = lighting_rng.randf() < lit_window_chance
-		if window.visible:
-			lit_count += 1
-	if lit_count == 0 and not windows.is_empty() and lit_window_chance > 0.0:
-		windows[lighting_rng.randi_range(0, windows.size() - 1)].visible = true
+	window_lighting.apply(model, lighting_rng, lit_window_chance, streamer_window_chance)
+	apply_emissive_window_material(model)
 
-func collect_window_meshes(node: Node, output: Array[MeshInstance3D]) -> void:
-	if node is MeshInstance3D and node.name.begins_with("WindowLight_"):
-		output.append(node)
+func apply_emissive_window_material(node: Node) -> void:
+	if node is MeshInstance3D:
+		var base := node.material_override as StandardMaterial3D
+		if base and base.albedo_texture:
+			var material := ShaderMaterial.new()
+			material.shader = preload("res://building_windows.gdshader")
+			material.set_shader_parameter("albedo_texture", base.albedo_texture)
+			material.set_shader_parameter("tint", base.albedo_color)
+			node.material_override = material
 	for child in node.get_children():
-		collect_window_meshes(child, output)
+		apply_emissive_window_material(child)
 
 func _physics_process(_delta: float) -> void:
 	if Engine.is_editor_hint():
@@ -359,6 +367,10 @@ func make_terrain() -> void:
 			var x := -terrain_size * 0.5 + xi * step
 			var z := -terrain_size * 0.5 + zi * step
 			var h := height_at(x, z)
+			# Excavate the underlying terrain, including cells crossing road edges.
+			# The asphalt owns both the visible surface and its collision.
+			if on_grid_road(Vector2(x, z), step * 1.5) or distance_to_diagonal_road(Vector2(x, z)) < diagonal_road_width * 0.5 + step * 1.5:
+				h -= 1.0
 			var color_shift := detail_noise.get_noise_2d(x + 14.0, z - 9.0) * 0.06
 			tool.set_color(Color(0.22 + color_shift, 0.24 + color_shift, 0.26 + color_shift + h * 0.001))
 			tool.add_vertex(Vector3(x, h, z))
@@ -414,31 +426,104 @@ func make_roads() -> void:
 		road.name = "Road_V_%d" % x
 		road.position.x = x
 		$Roads.add_child(road)
-		add_terrain_patch(road, "Asphalt", road_width, road_visual_extent * 2.0, 0.08, asphalt, Vector2.ZERO, terrain_step)
-		for side in [-1.0, 1.0]:
-			add_road_edge_taper_sections(road, true, side, horizontal_streets, asphalt)
-		for z in range(-roundi(road_visual_extent - 8.0), roundi(road_visual_extent - 8.0) + 1, 8):
-			if not near_street(z,horizontal_streets,maxf(road_width*0.5+2.0,stop_line_setback+2.0)):
-				add_terrain_patch(road,"LaneDash_%d" % z,0.16,3.0,0.11,center_line,Vector2(0.0,z))
-		for side in [-1.0, 1.0]:
-			var sidewalk_x: float = side * (road_width + sidewalk_width) * 0.5
-			add_sidewalk_sections(road, true, sidewalk_x, horizontal_streets, sidewalk_width, sidewalk, sidewalk_crack)
+		var extra := preload("res://city_road_rules.gd").extra_width(true, x, -1.0)
+		preload("res://city_road_rules.gd").paint(self, road, true, x, horizontal_streets, center_line)
 	for z in horizontal_streets:
 		var road := Node3D.new()
 		road.name = "Road_H_%d" % z
 		road.position.z = z
 		$Roads.add_child(road)
-		add_terrain_patch(road, "Asphalt", road_visual_extent * 2.0, road_width, 0.09, asphalt, Vector2.ZERO, terrain_step)
-		for side in [-1.0, 1.0]:
-			add_road_edge_taper_sections(road, false, side, vertical_streets, asphalt)
-		for x in range(-roundi(road_visual_extent - 8.0), roundi(road_visual_extent - 8.0) + 1, 8):
-			if not near_street(x,vertical_streets,maxf(road_width*0.5+2.0,stop_line_setback+2.0)):
-				add_terrain_patch(road,"LaneDash_%d" % x,3.0,0.16,0.12,center_line,Vector2(x,0.0))
-		for side in [-1.0, 1.0]:
-			var sidewalk_z: float = z + side * (road_width + sidewalk_width) * 0.5
-			if not near_street(sidewalk_z, horizontal_streets, road_width * 0.5):
-				add_sidewalk_sections(road, false, side * (road_width + sidewalk_width) * 0.5, vertical_streets, sidewalk_width, sidewalk, sidewalk_crack)
+		var extra := preload("res://city_road_rules.gd").extra_width(false, z, 1.0)
+		preload("res://city_road_rules.gd").paint(self, road, false, z, vertical_streets, center_line)
 	make_road_decals(vertical_streets, horizontal_streets)
+	make_diagonal_roads(asphalt, sidewalk, center_line)
+	preload("res://city_road_surface.gd").generate(self, asphalt)
+
+func make_sidewalks() -> void:
+	var sidewalk := StandardMaterial3D.new()
+	sidewalk.albedo_color = Color(0.65, 0.66, 0.62)
+	sidewalk.roughness = 1.0
+	var crack := StandardMaterial3D.new()
+	crack.albedo_color = Color(0.30, 0.32, 0.32)
+	var verticals: Array = [-128, -64, 0, 64, 128]
+	var horizontals: Array = [-144, -80, -16, 48, 112, 176]
+	var rules := preload("res://city_road_rules.gd")
+	for x in verticals:
+		for side in [-1.0, 1.0]:
+			add_sidewalk_sections($Roads.get_node("Road_V_%d" % x), true, side * ((road_width + sidewalk_width) * 0.5 + rules.extra_width(true, x, side)), horizontals, sidewalk_width, sidewalk, crack)
+	for z in horizontals:
+		for side in [-1.0, 1.0]:
+			add_sidewalk_sections($Roads.get_node("Road_H_%d" % z), false, side * ((road_width + sidewalk_width) * 0.5 + rules.extra_width(false, z, side)), verticals, sidewalk_width, sidewalk, crack)
+	make_rounded_block_sidewalks(sidewalk)
+
+func distance_to_diagonal_road(point: Vector2) -> float:
+	var nearest := INF
+	if not diagonal_roads_enabled:
+		return nearest
+	for segment in diagonal_road_segments:
+		var start := Vector2(segment.x, segment.y)
+		var finish := Vector2(segment.z, segment.w)
+		var direction := finish - start
+		if direction.length_squared() < 1.0:
+			continue
+		var t := clampf((point - start).dot(direction) / direction.length_squared(), 0.0, 1.0)
+		nearest = minf(nearest, point.distance_to(start + direction * t))
+	return nearest
+
+func on_grid_road(point: Vector2, clearance: float = 0.0) -> bool:
+	for x in range(-128, 129, 64):
+		if absf(point.x - x) < road_width * 0.5 + preload("res://city_road_rules.gd").extra_width(true, x, signf(point.x - x)) + clearance:
+			return true
+	for z in range(-144, 177, 64):
+		if absf(point.y - z) < road_width * 0.5 + preload("res://city_road_rules.gd").extra_width(false, z, signf(point.y - z)) + clearance:
+			return true
+	return false
+
+func make_diagonal_roads(asphalt: Material, sidewalk: Material, paint: Material) -> void:
+	if not diagonal_roads_enabled:
+		return
+	for index in diagonal_road_segments.size():
+		var segment := diagonal_road_segments[index]
+		var start := Vector2(segment.x, segment.y)
+		var finish := Vector2(segment.z, segment.w)
+		if start.distance_to(finish) < 1.0:
+			continue
+		var direction := (finish - start).normalized()
+		var right := Vector2(-direction.y, direction.x)
+		var road := Node3D.new()
+		road.name = "DiagonalRoad_%d" % index
+		$Roads.add_child(road)
+		for side in [-1.0, 1.0]:
+			add_diagonal_strip(road, "DoubleYellow", start + right * side * 0.23, finish + right * side * 0.23, 0.17, 0.24, paint, true)
+
+func add_diagonal_strip(parent: Node3D, label: String, start: Vector2, finish: Vector2, width: float, lift: float, material: Material, trim_junctions: bool = false) -> void:
+	var direction := (finish - start).normalized()
+	var right := Vector2(-direction.y, direction.x)
+	var steps := maxi(1, ceili(start.distance_to(finish) / 1.0))
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var triangles := 0
+	for step in steps:
+		var a := start.lerp(finish, float(step) / steps)
+		var b := start.lerp(finish, float(step + 1) / steps)
+		if trim_junctions and on_grid_road((a + b) * 0.5, width * 0.5 + 0.5):
+			continue
+		var corners := [a - right * width * 0.5, a + right * width * 0.5, b - right * width * 0.5, b + right * width * 0.5]
+		for corner_index in [0, 1, 2, 1, 3, 2]:
+			var point: Vector2 = corners[corner_index]
+			var ground := terrain_surface_height_at(point.x, point.y)
+			tool.add_vertex(Vector3(point.x, ground + lift, point.y))
+		triangles += 2
+	if triangles == 0:
+		return
+	tool.generate_normals()
+	var mesh := tool.commit()
+	mesh.surface_set_material(0, material)
+	var visual := MeshInstance3D.new()
+	visual.name = label
+	visual.mesh = mesh
+	parent.add_child(visual)
+	if label in ["Asphalt", "AsphaltShoulder"]: visual.create_trimesh_collision()
 
 func make_road_decals(vertical_streets: Array[int], horizontal_streets: Array[int]) -> void:
 	var stop_paint := StandardMaterial3D.new()
@@ -451,19 +536,117 @@ func make_road_decals(vertical_streets: Array[int], horizontal_streets: Array[in
 	grate_slots.albedo_color = Color(0.31, 0.34, 0.35)
 	grate_slots.roughness = 0.7
 	var line_distance := maxf(stop_line_setback, crosswalk_setback + 4.5)
+	var rules := preload("res://city_road_rules.gd")
 	for x in vertical_streets:
 		for z in horizontal_streets:
-			add_terrain_patch($Roads, "StopLine_Southbound", 7.2, 0.42, 0.18, stop_paint, Vector2(x - 4.0, z - line_distance), 0.5, true)
-			if z + line_distance < road_visual_extent - 1.0:
+			var vertical_direction := rules.one_way(true, x)
+			var wide_v := rules.extra_width(true, x, -1)
+			if vertical_direction >= 0:
+				add_terrain_patch($Roads, "StopLine_Southbound", 7.2 + wide_v + (8.0 if vertical_direction != 0 else 0.0), 0.42, 0.18, stop_paint, Vector2(x - wide_v * 0.5 - (4.0 if vertical_direction == 0 else 0.0), z - line_distance), 0.5, true)
+			if vertical_direction <= 0 and z + line_distance < road_visual_extent - 1.0:
 				add_terrain_patch($Roads, "StopLine_Northbound", 7.2, 0.42, 0.18, stop_paint, Vector2(x + 4.0, z + line_distance), 0.5, true)
 			if z > -144 and z < 176:
-				add_terrain_patch($Roads, "StopLine_Eastbound", 0.42, 7.2, 0.18, stop_paint, Vector2(x - line_distance, z + 4.0), 0.5, true)
-				add_terrain_patch($Roads, "StopLine_Westbound", 0.42, 7.2, 0.18, stop_paint, Vector2(x + line_distance, z - 4.0), 0.5, true)
+				var horizontal_direction := rules.one_way(false, z)
+				var wide_h := rules.extra_width(false, z, 1)
+				if horizontal_direction >= 0:
+					add_terrain_patch($Roads, "StopLine_Eastbound", 0.42, 7.2 + wide_h, 0.18, stop_paint, Vector2(x - line_distance, z + 4.0 + wide_h * 0.5), 0.5, true)
+				if horizontal_direction <= 0:
+					add_terrain_patch($Roads, "StopLine_Westbound", 0.42, 7.2 + (8.0 if horizontal_direction != 0 else 0.0), 0.18, stop_paint, Vector2(x + line_distance, z - (4.0 if horizontal_direction == 0 else 0.0)), 0.5, true)
 		for z in [-112, -48, 16, 80, 144]:
 			add_sewer_grate(Vector2(x - (road_width * 0.5 - 0.7), z), true, grate_metal, grate_slots)
 	for z in horizontal_streets:
 		for x in [-96, -32, 32, 96]:
 			add_sewer_grate(Vector2(x, z + (road_width * 0.5 - 0.7)), false, grate_metal, grate_slots)
+
+func rounded_block_contour(center: Vector2, inset: float = 0.0) -> PackedVector2Array:
+	var points := PackedVector2Array()
+	var half_size := 32.0 - road_width * 0.5
+	var radius := minf(block_corner_radius, half_size - sidewalk_width)
+	var inner_radius := maxf(0.0, radius - inset)
+	var rules := preload("res://city_road_rules.gd")
+	var left := center.x - half_size + rules.extra_width(true, center.x - 32, 1.0)
+	var right := center.x + half_size - rules.extra_width(true, center.x + 32, -1.0)
+	var low := center.y - half_size + rules.extra_width(false, center.y - 32, 1.0)
+	var high := center.y + half_size - rules.extra_width(false, center.y + 32, -1.0)
+	var origins := [Vector2(right - radius, high - radius), Vector2(left + radius, high - radius), Vector2(left + radius, low + radius), Vector2(right - radius, low + radius)]
+	for corner in 4:
+		var origin: Vector2 = origins[corner]
+		for step in 13:
+			var angle := (float(corner) + float(step) / 12.0) * PI * 0.5
+			points.append(origin + Vector2(cos(angle), sin(angle)) * inner_radius)
+		var next_origin: Vector2 = origins[(corner + 1) % 4]
+		var normal := Vector2(cos((corner + 1) * PI * 0.5), sin((corner + 1) * PI * 0.5))
+		var steps := ceili(origin.distance_to(next_origin))
+		for step in range(1, steps):
+			points.append(origin.lerp(next_origin, float(step) / steps) + normal * inner_radius)
+	return points
+
+func make_rounded_block_sidewalks(material: Material) -> void:
+	for x in range(-96, 97, 64):
+		for z in range(-112, 145, 64):
+			if is_diagonal_plot(Vector2(x, z)):
+				preload("res://city_islands.gd").make_block(self, Vector2(x, z), material)
+			else:
+				add_block_ring($Roads, Vector2(x, z), sidewalk_width, sidewalk_height, material)
+
+func add_block_ring(parent: Node3D, center: Vector2, width: float, lift: float, material: Material, red: Material = null) -> void:
+	var layout := preload("res://city_surface_layout.gd")
+	var masks := layout.road_masks(self, 0.01)
+	var outer := rounded_block_contour(center)
+	var inner := rounded_block_contour(center, width)
+	var tools_by_color: Array[SurfaceTool] = []
+	for index in (2 if red != null else 1):
+		var surface := SurfaceTool.new()
+		surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+		tools_by_color.append(surface)
+	var counts := [0, 0]
+	for index in outer.size():
+		var next := (index + 1) % outer.size()
+		var midpoint := (outer[index] + outer[next] + inner[index] + inner[next]) * 0.25
+		var pieces := layout.remaining(PackedVector2Array([outer[index], outer[next], inner[next], inner[index]]), masks)
+		if pieces.is_empty(): continue
+		var restricted := red != null and (absf(midpoint.x - center.x) > 17.0 and absf(midpoint.y - center.y) > 17.0)
+		if red != null:
+			for bay in $ParkingSpaces.get_children():
+				if midpoint.distance_to(Vector2(bay.position.x, bay.position.z)) < 7.5:
+					restricted = false
+			for pad in get_parent().get_node("ParkingPads").get_children():
+				if midpoint.distance_to(Vector2(pad.position.x, pad.position.z)) < 10.0:
+					restricted = false
+		var color_index := 1 if restricted else 0
+		var surface: SurfaceTool = tools_by_color[color_index]
+		var vertices: Array[Vector3] = []
+		for point in [outer[index], inner[index], outer[next], inner[next]]:
+			var ground := terrain_surface_height_at(point.x, point.y)
+			vertices.append(Vector3(point.x, ground + lift, point.y))
+		for piece in pieces:
+			layout.emit_polygon(self, surface, piece, lift, Vector3.ZERO, false)
+		counts[color_index] += 6
+		if red == null:
+			# Raised curb faces share the exact top edge, including every corner.
+			for edge in [[0, 2], [3, 1]]:
+				var a: Vector3 = vertices[edge[0]]
+				var b: Vector3 = vertices[edge[1]]
+				if distance_to_diagonal_road(Vector2(a.x, a.z)) < diagonal_road_width * 0.5 + 0.01 or distance_to_diagonal_road(Vector2(b.x, b.z)) < diagonal_road_width * 0.5 + 0.01: continue
+				var low_a := a - Vector3.UP * (lift - 0.08)
+				var low_b := b - Vector3.UP * (lift - 0.08)
+				for vertex in [a, b, low_a, b, low_b, low_a]:
+					surface.add_vertex(vertex)
+	for index in tools_by_color.size():
+		if counts[index] == 0:
+			continue
+		tools_by_color[index].generate_normals()
+		var mesh := tools_by_color[index].commit()
+		mesh.surface_set_material(0, red if index == 1 else material)
+		var visual := MeshInstance3D.new()
+		visual.name = "RoundedSidewalk" if red == null else ("NoParkingRed" if index == 1 else "WhiteCurbLine")
+		visual.mesh = mesh
+		parent.add_child(visual, true)
+		if red == null:
+			visual.create_trimesh_collision()
+			for child in visual.get_children():
+				if child is StaticBody3D:
+					child.set_meta("sidewalk", true)
 
 func make_curb_markings() -> void:
 	var white := StandardMaterial3D.new()
@@ -475,23 +658,14 @@ func make_curb_markings() -> void:
 	var markings := Node3D.new()
 	markings.name = "CurbMarkings"
 	$Roads.add_child(markings)
-	var curb_offset := road_width * 0.5 - 0.2
-	for road_x in range(-128, 129, 64):
-		for block_z in [-112.0, -48.0, 16.0, 80.0, 144.0]:
-			for side in [-1.0, 1.0]:
-				for along in [-18.0, -12.0, -6.0, 0.0, 6.0, 12.0, 18.0]:
-					var at := Vector2(road_x + side * curb_offset, block_z + along)
-					var restricted := absf(along) >= 18.0 or (roundi(block_z) + road_x + roundi(side)) % 5 == 0
-					add_curb_marking(markings, at, true, restricted, white, red)
-	for road_z in range(-144, 177, 64):
-		for block_x in [-96.0, -32.0, 32.0, 96.0]:
-			for side in [-1.0, 1.0]:
-				for along in [-18.0, -12.0, -6.0, 0.0, 6.0, 12.0, 18.0]:
-					var at := Vector2(block_x + along, road_z + side * curb_offset)
-					var restricted := absf(along) >= 18.0 or (roundi(block_x) + road_z + roundi(side)) % 5 == 0
-					add_curb_marking(markings, at, false, restricted, white, red)
+	for x in range(-96, 97, 64):
+		for z in range(-112, 145, 64):
+			if is_diagonal_plot(Vector2(x, z)): continue # Closed islands carry their own complete curb outline.
+			add_block_ring(markings, Vector2(x, z), 0.28, sidewalk_height + 0.012, white, red)
 
 func add_curb_marking(parent: Node3D, at: Vector2, vertical: bool, restricted: bool, white: Material, red: Material) -> void:
+	if distance_to_diagonal_road(at) < diagonal_road_width * 0.5 + 3.0:
+		return
 	# A designated parking/serving bay always retains a white curb.
 	if restricted:
 		for bay in $ParkingSpaces.get_children():
@@ -643,19 +817,23 @@ func near_street(value: float, streets: Array, distance: float) -> bool:
 	return false
 
 func add_sidewalk_sections(road: Node3D, vertical: bool, side_offset: float, cross_streets: Array, width: float, material: Material, crack_material: Material) -> void:
+	# Interior sidewalks are continuous rounded block rings; preserve outer shoulders.
+	var across: float = road.position.x + side_offset if vertical else road.position.z + side_offset
+	if (vertical and across > -128.0 and across < 128.0) or (not vertical and across > -144.0 and across < 176.0):
+		return
 	var start := -road_visual_extent
 	for cross in cross_streets:
 		var finish: float = float(cross) - road_width * 0.5
 		if finish > start + 0.1:
 			var center := (start + finish) * 0.5
 			var length := finish - start
-			add_terrain_patch(road, "Sidewalk", width if vertical else length, length if vertical else width, 0.14, material, Vector2(side_offset if vertical else center, center if vertical else side_offset), 1.0, true)
+			add_terrain_patch(road, "Sidewalk", width if vertical else length, length if vertical else width, sidewalk_height, material, Vector2(side_offset if vertical else center, center if vertical else side_offset), 1.0, true)
 			add_sidewalk_cracks(road, vertical, side_offset, start, finish, width, crack_material)
 		start = float(cross) + road_width * 0.5
 	if start < road_visual_extent:
 		var center := (start + road_visual_extent) * 0.5
 		var length := road_visual_extent - start
-		add_terrain_patch(road, "Sidewalk", width if vertical else length, length if vertical else width, 0.14, material, Vector2(side_offset if vertical else center, center if vertical else side_offset), 1.0, true)
+		add_terrain_patch(road, "Sidewalk", width if vertical else length, length if vertical else width, sidewalk_height, material, Vector2(side_offset if vertical else center, center if vertical else side_offset), 1.0, true)
 		add_sidewalk_cracks(road, vertical, side_offset, start, road_visual_extent, width, crack_material)
 
 func add_sidewalk_cracks(road: Node3D, vertical: bool, side_offset: float, start: float, finish: float, width: float, material: Material) -> void:
@@ -674,8 +852,8 @@ func add_sidewalk_cracks(road: Node3D, vertical: bool, side_offset: float, start
 				var local_across: float = side_offset + across_side * (width * 0.5 - 0.08)
 				var x: float = road.position.x + (local_across if vertical else local_along)
 				var z: float = road.position.z + (local_along if vertical else local_across)
-				var ground := maxf(terrain_surface_height_at(x, z), height_at(x, z))
-				tool.add_vertex(Vector3(x - road.position.x, ground + 0.15, z - road.position.z))
+				var ground := terrain_surface_height_at(x, z)
+				tool.add_vertex(Vector3(x - road.position.x, ground + sidewalk_height + 0.01, z - road.position.z))
 		for strip in range(2):
 			var a: int = base + strip
 			var indices := [a, a + 3, a + 1, a + 1, a + 3, a + 4] if vertical else [a, a + 1, a + 3, a + 1, a + 4, a + 3]
@@ -706,7 +884,8 @@ func add_road_edge_taper(road: Node3D, vertical: bool, side: float, start: float
 	for index in range(segments + 1):
 		var along := lerpf(start, finish, float(index) / segments)
 		for edge in range(2):
-			var across := side * (road_width * 0.5 + float(edge) * 1.5)
+			var coordinate := road.position.x if vertical else road.position.z
+			var across := side * (road_width * 0.5 + preload("res://city_road_rules.gd").extra_width(vertical, coordinate, side) + float(edge) * 1.5)
 			var x := road.position.x + (across if vertical else along)
 			var z := road.position.z + (along if vertical else across)
 			var lift := (0.08 if vertical else 0.09) if edge == 0 else 0.015
@@ -743,6 +922,32 @@ func terrain_surface_height_at(x: float, z: float) -> float:
 	return h10 * (1.0 - v) + h01 * (1.0 - u) + h11 * (u + v - 1.0)
 
 func add_terrain_patch(parent: Node3D, label: String, width_x: float, width_z: float, lift: float, material: Material, offset: Vector2 = Vector2.ZERO, mesh_step: float = 2.0, follow_surface: bool = false) -> void:
+	if label.begins_with("Stripe_") or label.begins_with("StopLine_") or label in ["SewerGrate", "GrateRib"]:
+		var projection := preload("res://city_road_surface.gd")
+		var layout := preload("res://city_surface_layout.gd")
+		var center := Vector2(parent.position.x, parent.position.z) + offset
+		var surface := SurfaceTool.new()
+		surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+		projection.emit_polygon(self, surface, layout.rect_polygon(Rect2(center - Vector2(width_x, width_z) * 0.5, Vector2(width_x, width_z))), lift, parent.position)
+		surface.generate_normals()
+		var mesh := surface.commit()
+		mesh.surface_set_material(0, material)
+		var visual := MeshInstance3D.new()
+		visual.name = label
+		visual.mesh = mesh
+		visual.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		parent.add_child(visual)
+		return
+	if label == "Sidewalk":
+		var layout := preload("res://city_surface_layout.gd")
+		var center := Vector2(parent.position.x, parent.position.z) + offset
+		layout.add_patch(self, parent, label, layout.rect_polygon(Rect2(center - Vector2(width_x, width_z) * 0.5, Vector2(width_x, width_z))), lift, material, 0.45)
+		return
+	if label in ["Grass", "ParkGrass", "ParkPath_X", "ParkPath_Z", "LampGravel"]:
+		var layout := preload("res://city_surface_layout.gd")
+		var center := Vector2(parent.position.x, parent.position.z) + offset
+		layout.add_patch(self, parent, label, layout.rect_polygon(Rect2(center - Vector2(width_x, width_z) * 0.5, Vector2(width_x, width_z))), lift, material, sidewalk_width + 0.05)
+		return
 	var columns := maxi(1, ceili(width_x / mesh_step))
 	var rows := maxi(1, ceili(width_z / mesh_step))
 	var tool := SurfaceTool.new()
@@ -751,7 +956,7 @@ func add_terrain_patch(parent: Node3D, label: String, width_x: float, width_z: f
 		for xi in range(columns + 1):
 			var x := parent.position.x + offset.x + (float(xi) / columns - 0.5) * width_x
 			var z := parent.position.z + offset.y + (float(zi) / rows - 0.5) * width_z
-			var ground := maxf(terrain_surface_height_at(x, z), height_at(x, z)) if follow_surface else height_at(x, z)
+			var ground := terrain_surface_height_at(x, z) if follow_surface else height_at(x, z)
 			tool.add_vertex(Vector3(x - parent.position.x, ground + lift, z - parent.position.z))
 	for zi in range(rows):
 		for xi in range(columns):
@@ -768,8 +973,10 @@ func add_terrain_patch(parent: Node3D, label: String, width_x: float, width_z: f
 	instance.name = label
 	instance.mesh = mesh
 	parent.add_child(instance)
+	if label == "Asphalt": instance.create_trimesh_collision()
 
 func make_crosswalks() -> void:
+	preload("res://city_islands.gd").crosswalks(self)
 	if crosswalk_scene == null:
 		return
 	var paint := StandardMaterial3D.new()
@@ -783,13 +990,13 @@ func make_crosswalks() -> void:
 			var crossing := crosswalk_scene.instantiate() as Node3D
 			crossing.name = "Crosswalk_%02d" % crossing_index
 			crossing.position = Vector3(intersection_x - crosswalk_setback, 0.0, intersection_z)
-			crossing.set("crossing_offset",(road_width + sidewalk_width) * 0.5)
+			crossing.set("crossing_offset",(road_width + sidewalk_width) * 0.5 + preload("res://city_road_rules.gd").extra_width(false, intersection_z, 1))
 			crossing.set("intersection_center_x",intersection_x)
 			crossing.set("starting_offset",phase_offset)
 			$Crosswalks.add_child(crossing)
 			for side in [-1, 1]:
 				var post := crossing.get_node("SouthSignal" if side < 0 else "NorthSignal") as Node3D
-				post.position.z = side * (road_width + sidewalk_width) * 0.5
+				post.position.z = side * ((road_width + sidewalk_width) * 0.5 + preload("res://city_road_rules.gd").extra_width(false, intersection_z, side))
 				post.position.y = height_at(crossing.position.x + post.position.x, intersection_z + post.position.z) + 0.12
 				if traffic_light_model:
 					post.get_node("Pole").hide()
@@ -804,6 +1011,7 @@ func make_crosswalks() -> void:
 					make_traffic_bulb(post,"VehicleRed",Color("ff3438"),2.65)
 					make_traffic_bulb(post,"VehicleYellow",Color("ffd149"),2.40)
 					make_traffic_bulb(post,"VehicleGreen",Color("50f986"),2.15)
+				add_knockable_pole(post, 3.7 * traffic_light_scale / 6.0)
 			if streetlight_model:
 				var streetlight := streetlight_model.instantiate() as Node3D
 				streetlight.name = "KenneyStreetLight"
@@ -814,14 +1022,9 @@ func make_crosswalks() -> void:
 				streetlight.rotation.y = 0.0
 				apply_kit_material(streetlight,road_material)
 				crossing.add_child(streetlight)
-				var glow := OmniLight3D.new()
-				glow.name = "WarmStreetGlow"
-				glow.position.y = 0.56
-				glow.light_color = Color("ffe8b1")
-				glow.light_energy = 0.45
-				glow.omni_range = 8.0
-				streetlight.add_child(glow)
-			for stripe in range(15):
+				add_street_spotlight(streetlight)
+				add_knockable_pole(streetlight, 0.6 * streetlight_scale)
+			for stripe in range(15 + ceili(preload("res://city_road_rules.gd").extra_width(false, intersection_z, 1))):
 				var offset_z := float(stripe - 7)
 				add_terrain_patch(crossing,"Stripe_%d" % stripe,3.6,0.5,0.20,paint,Vector2(0.0,offset_z),0.25,true)
 			if (crossing_index * 7) % 20 < roundi(20.0 * multi_crosswalk_fraction):
@@ -831,7 +1034,7 @@ func make_perpendicular_crosswalk(intersection_x: float, intersection_z: float, 
 	var crossing := crosswalk_scene.instantiate() as Node3D
 	crossing.name = "Crosswalk_%02d_Perpendicular" % index
 	crossing.position = Vector3(intersection_x, 0.0, intersection_z - crosswalk_setback)
-	crossing.set("crossing_offset", (road_width + sidewalk_width) * 0.5)
+	crossing.set("crossing_offset", (road_width + sidewalk_width) * 0.5 + preload("res://city_road_rules.gd").extra_width(true, intersection_x, -1))
 	crossing.set("intersection_center_x", intersection_x)
 	crossing.set("crosses_vertical_road", true)
 	crossing.set("walk_seconds", 8.0)
@@ -840,7 +1043,7 @@ func make_perpendicular_crosswalk(intersection_x: float, intersection_z: float, 
 	$Crosswalks.add_child(crossing)
 	for side in [-1, 1]:
 		var post := crossing.get_node("SouthSignal" if side < 0 else "NorthSignal") as Node3D
-		post.position = Vector3(side * (road_width + sidewalk_width) * 0.5, 0.0, -2.25)
+		post.position = Vector3(side * ((road_width + sidewalk_width) * 0.5 + preload("res://city_road_rules.gd").extra_width(true, intersection_x, side)), 0.0, -2.25)
 		post.position.y = height_at(intersection_x + post.position.x, crossing.position.z + post.position.z) + 0.12
 		post.rotation.y = PI * 0.5 if side < 0 else -PI * 0.5
 		if traffic_light_model:
@@ -855,27 +1058,39 @@ func make_perpendicular_crosswalk(intersection_x: float, intersection_z: float, 
 			make_traffic_bulb(post, "VehicleRed", Color("ff3438"), 2.65)
 			make_traffic_bulb(post, "VehicleYellow", Color("ffd149"), 2.40)
 			make_traffic_bulb(post, "VehicleGreen", Color("50f986"), 2.15)
-	for stripe in range(15):
+		add_knockable_pole(post, 3.7 * traffic_light_scale / 6.0)
+	for stripe in range(-ceili(preload("res://city_road_rules.gd").extra_width(true, intersection_x, -1)), 15):
 		var offset_x := float(stripe - 7)
 		add_terrain_patch(crossing, "Stripe_%d" % stripe, 0.5, 3.6, 0.20, paint, Vector2(offset_x, 0.0), 0.25, true)
 
 func make_streetlights() -> void:
+	lamp_gravel_points.clear()
 	if not streetlight_model:
 		return
-	var curb_offset := (road_width + sidewalk_width) * 0.5
+	var curb_offset := road_width * 0.5 + sidewalk_width + 0.8
 	# Two poles on each side of every block-length street segment.
 	for road_x in range(-128, 129, 64):
 		for block_z in [-112.0, -48.0, 16.0, 80.0, 144.0]:
 			for along in [-12.0, 12.0]:
 				for side in [-1.0, 1.0]:
-					add_streetlight(Vector2(road_x + side * curb_offset, block_z + along), -side * PI * 0.5)
+					add_streetlight(Vector2(road_x + side * (curb_offset + preload("res://city_road_rules.gd").extra_width(true, road_x, side)), block_z + along), side * PI * 0.5)
 	for road_z in range(-144, 177, 64):
 		for block_x in [-96.0, -32.0, 32.0, 96.0]:
 			for along in [-12.0, 12.0]:
 				for side in [-1.0, 1.0]:
-					add_streetlight(Vector2(block_x + along, road_z + side * curb_offset), 0.0 if side > 0.0 else PI)
+					add_streetlight(Vector2(block_x + along, road_z + side * (curb_offset + preload("res://city_road_rules.gd").extra_width(false, road_z, side))), 0.0 if side > 0.0 else PI)
+	var gravel := StandardMaterial3D.new()
+	gravel.albedo_color = Color(0.40, 0.38, 0.33)
+	gravel.roughness = 1.0
+	var polygons: Array[PackedVector2Array] = []
+	var layout := preload("res://city_surface_layout.gd")
+	for at in lamp_gravel_points:
+		polygons.append(layout.rect_polygon(Rect2(at - Vector2.ONE * 0.75, Vector2.ONE * 1.5)))
+	layout.add_patches(self, $Parks, "LampGravel", polygons, 0.07, gravel, sidewalk_width + 0.05)
 
 func add_streetlight(at: Vector2, yaw: float) -> void:
+	if distance_to_diagonal_road(at) < diagonal_road_width * 0.5 + 1.0:
+		return
 	for pad in get_parent().get_node("ParkingPads").get_children():
 		if Vector2(pad.position.x, pad.position.z).distance_to(at) < 6.0:
 			return
@@ -884,16 +1099,47 @@ func add_streetlight(at: Vector2, yaw: float) -> void:
 	lamp.position = Vector3(at.x, height_at(at.x, at.y) + 0.1, at.y)
 	lamp.scale = Vector3.ONE * streetlight_scale
 	lamp.rotation.y = yaw
+	lamp_gravel_points.append(at)
 	apply_kit_material(lamp, road_material)
 	$StreetSigns.add_child(lamp)
-	var glow := OmniLight3D.new()
-	glow.name = "WarmStreetGlow"
-	glow.position.y = 0.56
-	glow.light_color = Color("ffe8b1")
-	glow.light_energy = 0.45
-	glow.omni_range = 10.0
-	glow.shadow_enabled = false
-	lamp.add_child(glow)
+	add_street_spotlight(lamp)
+	add_knockable_pole(lamp, 0.6 * streetlight_scale)
+
+func add_knockable_pole(visual: Node3D, pole_height: float) -> void:
+	var body := RigidBody3D.new()
+	body.name = "KnockablePole"
+	body.set_script(preload("res://knockable_pole.gd"))
+	body.freeze = true
+	body.mass = 45.0
+	body.continuous_cd = true
+	body.collision_layer = 1
+	body.collision_mask = 1
+	visual.add_child(body)
+	body.top_level = true
+	body.global_transform = Transform3D(Basis(Vector3.UP, visual.global_rotation.y), visual.global_position + Vector3.UP * pole_height * 0.5)
+	body.visual = visual
+	body.height = pole_height
+	body.visual_scale = visual.global_basis.get_scale()
+	var collider := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(0.45, pole_height, 0.45)
+	collider.shape = shape
+	body.add_child(collider)
+
+func add_street_spotlight(lamp: Node3D) -> void:
+	var light := SpotLight3D.new()
+	light.name = "WarmStreetSpotlight"
+	lamp.add_child(light)
+	# Keep the beam in world units rather than inheriting the pole model's scale.
+	light.top_level = true
+	light.global_position = lamp.to_global(Vector3(0, 0.56, 0))
+	light.rotation.x = -PI * 0.5
+	light.light_color = Color("ffe8b1")
+	light.light_energy = 2.0
+	light.spot_range = 18.0
+	light.spot_angle = 65.0
+	light.spot_angle_attenuation = 0.7
+	light.shadow_enabled = false
 
 func make_stop_signs() -> void:
 	var red := StandardMaterial3D.new()
@@ -905,9 +1151,10 @@ func make_stop_signs() -> void:
 	for road_x in range(-128, 129, 64):
 		for side in [-1.0, 1.0]:
 			var intersection_z := -144.0 if side < 0.0 else 176.0
+			if not preload("res://city_road_rules.gd").allows(Vector3(0, 0, side), Vector3(road_x, 0, intersection_z)): continue
 			var sign := Node3D.new()
 			sign.name = "StopSign_%d_%d" % [road_x, roundi(intersection_z)]
-			var sign_x: float = float(road_x) + (10.3 if side < 0.0 else -10.3)
+			var sign_x: float = float(road_x) - side * (10.3 + preload("res://city_road_rules.gd").extra_width(true, road_x, -side))
 			var sign_z: float = intersection_z - side * 12.0
 			sign.position = Vector3(sign_x, height_at(sign_x, sign_z), sign_z)
 			$StreetSigns.add_child(sign)
@@ -967,20 +1214,47 @@ func make_traffic_bulb(post: Node3D, label: String, color: Color, height: float)
 	bulb.material_override = material
 	post.add_child(bulb)
 
+func parking_center_range(segment_start: float, segment_end: float, travel_direction: float, vertical: bool = true, road_coordinate: float = INF, side: float = -1.0) -> Vector2:
+	# Include painted bay/stop-line edges, not just their centre points.
+	var half_bay := parking_bay_length * 0.5 + 0.06
+	var stop_distance := maxf(stop_line_setback, crosswalk_setback + 4.5)
+	var vacancy := parking_bay_length * maxf(1.0, parking_stop_line_clearance_lengths)
+	var crossing_clearance := maxf(road_width * 0.5 + 2.0, crosswalk_setback + 1.8)
+	if is_finite(road_coordinate):
+		var rules := preload("res://city_road_rules.gd")
+		var junction := segment_end if travel_direction > 0 else segment_start
+		var intersection := Vector3(road_coordinate, 0, junction) if vertical else Vector3(junction, 0, road_coordinate)
+		var axis := Vector3(0, 0, travel_direction) if vertical else Vector3(travel_direction, 0, 0)
+		var lane_side := side * (-travel_direction if vertical else travel_direction) * 4.0
+		if rules.approach_kind(axis, intersection, lane_side) != "unmarked":
+			# The rear of the directional arrow sits 26 m before the junction.
+			stop_distance = maxf(stop_distance, 26.0)
+	if travel_direction > 0:
+		return Vector2(segment_start + crossing_clearance + half_bay, segment_end - stop_distance - 0.21 - vacancy - half_bay)
+	return Vector2(segment_start + stop_distance + 0.21 + vacancy + half_bay, segment_end - crossing_clearance - half_bay)
+
 func make_street_parking() -> void:
 	if parking_bay_count <= 0:
 		return
 	var candidates: Array[Dictionary] = []
 	for road_x in range(-128, 129, 64):
 		for segment_z in [-112, -48, 16, 80, 144]:
-			for along in [-8.0, 8.0]:
-				var side := -1.0 if rng.randf() < 0.5 else 1.0
-				candidates.append({"center": Vector2(road_x + side * 6.8, segment_z + along), "vertical": true, "axis": Vector3(0.0, 0.0, -side), "side": side})
+			for side in [-1.0, 1.0]:
+				if preload("res://city_road_rules.gd").extra_width(true, road_x, side) > 0: continue
+				var direction := preload("res://city_road_rules.gd").one_way(true, road_x)
+				var travel: float = direction if direction != 0 else -side
+				var valid_range := parking_center_range(segment_z - 32.0, segment_z + 32.0, travel, true, road_x, side)
+				if valid_range.x > valid_range.y: continue
+				candidates.append({"center": Vector2(road_x + side * (road_width * 0.5 - parking_bay_width * 0.5 - 0.2), rng.randf_range(valid_range.x, valid_range.y)), "vertical": true, "axis": Vector3(0.0, 0.0, travel), "side": side, "valid_range": valid_range})
 	for road_z in range(-144, 177, 64):
 		for segment_x in [-96, -32, 32, 96]:
-			for along in [-8.0, 8.0]:
-				var side := -1.0 if rng.randf() < 0.5 else 1.0
-				candidates.append({"center": Vector2(segment_x + along, road_z + side * 6.8), "vertical": false, "axis": Vector3(side, 0.0, 0.0), "side": side})
+			for side in [-1.0, 1.0]:
+				if preload("res://city_road_rules.gd").extra_width(false, road_z, side) > 0: continue
+				var direction := preload("res://city_road_rules.gd").one_way(false, road_z)
+				var travel: float = direction if direction != 0 else side
+				var valid_range := parking_center_range(segment_x - 32.0, segment_x + 32.0, travel, false, road_z, side)
+				if valid_range.x > valid_range.y: continue
+				candidates.append({"center": Vector2(rng.randf_range(valid_range.x, valid_range.y), road_z + side * (road_width * 0.5 - parking_bay_width * 0.5 - 0.2)), "vertical": false, "axis": Vector3(travel, 0.0, 0.0), "side": side, "valid_range": valid_range})
 	for index in range(candidates.size() - 1, 0, -1):
 		var other := rng.randi_range(0, index)
 		var previous := candidates[index]
@@ -990,6 +1264,7 @@ func make_street_parking() -> void:
 	for candidate in candidates:
 		if not parking_near_gameplay_object(candidate["center"]):
 			available.append(candidate)
+	# Short blocks cannot fit grouped rows plus the full stop-line vacancy.
 	var count := mini(parking_bay_count, available.size())
 	var serving_indices: Dictionary = {}
 	var serving_centers: Array[Vector2] = []
@@ -997,7 +1272,7 @@ func make_street_parking() -> void:
 		if serving_centers.size() >= city_serving_bay_count:
 			break
 		var candidate: Dictionary = available[index]
-		if not candidate["vertical"]:
+		if not candidate["vertical"] or candidate.has("row"):
 			continue
 		var candidate_center: Vector2 = candidate["center"]
 		var well_spaced := true
@@ -1029,9 +1304,23 @@ func make_street_parking() -> void:
 		bay_node.position = Vector3(center.x, 0.0, center.y)
 		var is_serving: bool = serving_indices.has(index)
 		bay_node.set_meta("serving", is_serving)
+		bay_node.set_meta("parking_axis", bay["axis"])
+		bay_node.set_meta("parking_valid_range", bay["valid_range"])
+		bay_node.set_meta("parking_row", bay.get("row", 0))
+		bay_node.set_meta("parking_side", bay["side"])
+		if not is_serving:
+			for other_index in range(count):
+				if other_index == index or serving_indices.has(other_index): continue
+				var other: Dictionary = available[other_index]
+				var other_center: Vector2 = other["center"]
+				if other["vertical"] != vertical: continue
+				var across: float = absf(center.x-other_center.x) if vertical else absf(center.y-other_center.y)
+				var along: float = absf(center.y-other_center.y) if vertical else absf(center.x-other_center.x)
+				if across < 0.05 and along <= parking_bay_length + parking_marker_gap + 0.1:
+					bay_node.set_meta("parking_row", 1)
 		bay_node.set_meta("occupied", not is_serving and ordinary_index < occupied_count)
 		$ParkingSpaces.add_child(bay_node)
-		add_street_parking_markings(bay_node, vertical, bay_asphalt, bay_paint)
+		add_street_parking_markings(bay_node, vertical, bay_asphalt, bay_paint, parking_bay_width, parking_bay_length)
 		if is_serving:
 			make_city_serving_bay(bay, serving_centers.find(center) + 1)
 			continue
@@ -1056,6 +1345,13 @@ func make_city_serving_bay(bay: Dictionary, number: int) -> void:
 	var pad := template.duplicate() as Area3D
 	pad.name = "CityServingPad_%02d" % number
 	pad.position = Vector3(center.x, 1.5, center.y)
+	pad.set_meta("compact_parking", true)
+	var zone := BoxShape3D.new()
+	zone.size = Vector3(parking_bay_width, 3.0, parking_bay_length)
+	pad.get_node("ParkingZone").shape = zone
+	var surface := PlaneMesh.new()
+	surface.size = Vector2(parking_bay_width, parking_bay_length)
+	pad.get_node("ServiceSurface").mesh = surface
 	level.get_node("ParkingPads").add_child(pad)
 	var spawn := Marker3D.new()
 	spawn.name = "CityPatronSpawn_%02d" % number
@@ -1070,6 +1366,8 @@ func make_city_serving_bay(bay: Dictionary, number: int) -> void:
 	level.get_node("PatronSpawns").add_child(spawn)
 
 func parking_near_gameplay_object(center: Vector2) -> bool:
+	if distance_to_diagonal_road(center) < diagonal_road_width * 0.5 + 5.0:
+		return true
 	var level := get_parent()
 	var truck := level.get_node_or_null("FoodTruck") as Node3D
 	if truck and center.distance_to(Vector2(truck.position.x, truck.position.z)) < 11.0:
@@ -1081,13 +1379,41 @@ func parking_near_gameplay_object(center: Vector2) -> bool:
 				return true
 	return false
 
-func add_street_parking_markings(bay: Node3D, vertical: bool, asphalt: Material, paint: Material) -> void:
-	add_terrain_patch(bay, "ParkingBaySurface", 2.35 if vertical else 6.8, 6.8 if vertical else 2.35, 0.105, asphalt, Vector2.ZERO, 0.5, true)
-	for side in [-1.0, 1.0]:
-		var long_offset := Vector2(side * 1.16, 0.0) if vertical else Vector2(0.0, side * 1.16)
-		var end_offset := Vector2(0.0, side * 3.4) if vertical else Vector2(side * 3.4, 0.0)
-		add_terrain_patch(bay, "BaySideLine", 0.11 if vertical else 6.8, 6.8 if vertical else 0.11, 0.17, paint, long_offset, 0.5, true)
-		add_terrain_patch(bay, "BayEndLine", 2.35 if vertical else 0.11, 0.11 if vertical else 2.35, 0.17, paint, end_offset, 0.5, true)
+func add_street_parking_markings(bay: Node3D, vertical: bool, asphalt: Material, paint: Material, bay_width: float = 3.4, bay_length: float = 11.4) -> void:
+	add_terrain_patch(bay, "ParkingBaySurface", bay_width if vertical else bay_length, bay_length if vertical else bay_width, 0.105, asphalt, Vector2.ZERO, 0.5, true)
+	# Retain the footprint for editor/spawn sizing without a filled rectangular tile.
+	for child in bay.get_children():
+		if child.name.begins_with("ParkingBaySurface"): child.hide()
+	var surface := SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var half := Vector2(bay_width, bay_length) * 0.5
+	var grouped: bool = int(bay.get_meta("parking_row", 0)) != 0 and not bay.get_meta("serving", false)
+	var segments: Array = []
+	var curb_side: float = float(bay.get_meta("parking_side", 1.0))
+	var corners := [Vector2(-half.x, -half.y), Vector2(half.x, -half.y), Vector2(half.x, half.y), Vector2(-half.x, half.y)]
+	if grouped and curb_side < 0:
+		for i in 4: corners[i].x = -corners[i].x
+	for i in 4:
+		if grouped and i == 3:
+			segments.append([corners[3], corners[3] + Vector2(0, -0.7)])
+			segments.append([corners[0], corners[0] + Vector2(0, 0.7)])
+		else: segments.append([corners[i], corners[(i + 1) % 4]])
+	for segment in segments:
+		var a: Vector2 = segment[0] if vertical else Vector2(segment[0].y, segment[0].x)
+		var b: Vector2 = segment[1] if vertical else Vector2(segment[1].y, segment[1].x)
+		var right := Vector2(-(b-a).y, (b-a).x).normalized() * 0.065
+		var origin := bay.position
+		var offset := Vector2(origin.x, origin.z)
+		var polygon := PackedVector2Array([a-right+offset, a+right+offset, b+right+offset, b-right+offset])
+		preload("res://city_road_surface.gd").emit_polygon(self, surface, polygon, 0.135, origin)
+	var mesh := surface.commit()
+	paint.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mesh.surface_set_material(0, paint)
+	var ticks := MeshInstance3D.new()
+	ticks.name = "ParkingTicks"
+	ticks.mesh = mesh
+	ticks.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	bay.add_child(ticks)
 
 func make_traffic() -> void:
 	if traffic_car_scene == null or traffic_car_models.is_empty():
@@ -1097,11 +1423,17 @@ func make_traffic() -> void:
 		if index < 5:
 			var x: float = -128.0+index*64.0
 			# Keep each direction on its right-hand lane (US traffic).
-			routes.append([Vector3(0,0,1),Vector3(x-4.0,0,0)])
-			routes.append([Vector3(0,0,-1),Vector3(x+4.0,0,0)])
+			var direction := preload("res://city_road_rules.gd").one_way(true, x)
+			if direction >= 0: routes.append([Vector3(0,0,1),Vector3(x-4.0,0,0)])
+			if direction <= 0: routes.append([Vector3(0,0,-1),Vector3(x+4.0,0,0)])
+			if direction != 0: routes.append([Vector3(0,0,direction),Vector3(x+4.0*direction,0,0)])
+			if preload("res://city_road_rules.gd").extra_width(true, x, -1.0) > 0: routes.append([Vector3.BACK, Vector3(x - 8.5, 0, 0)])
 		var z: float = -144.0+index*64.0
-		routes.append([Vector3(1,0,0),Vector3(0,0,z+4.0)])
-		routes.append([Vector3(-1,0,0),Vector3(0,0,z-4.0)])
+		var direction := preload("res://city_road_rules.gd").one_way(false, z)
+		if direction >= 0: routes.append([Vector3(1,0,0),Vector3(0,0,z+4.0)])
+		if direction <= 0: routes.append([Vector3(-1,0,0),Vector3(0,0,z-4.0)])
+		if direction != 0: routes.append([Vector3(direction,0,0),Vector3(0,0,z-4.0*direction)])
+		if preload("res://city_road_rules.gd").extra_width(false, z, 1.0) > 0: routes.append([Vector3.RIGHT, Vector3(0, 0, z + 8.5)])
 	for index in range(traffic_car_count):
 		var route: Array = routes[index % routes.size()]
 		var model_path: String = traffic_car_models[rng.randi_range(0, traffic_car_models.size() - 1)]
@@ -1161,26 +1493,20 @@ func align_playable_objects() -> void:
 
 func conform_pad_surface(surface: MeshInstance3D) -> void:
 	var size := surface.mesh.get_aabb().size
-	var columns := maxi(2, ceili(size.x))
-	var rows := maxi(2, ceili(size.z))
 	var tool := SurfaceTool.new()
 	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for zi in range(rows + 1):
-		for xi in range(columns + 1):
-			var x := (float(xi) / columns - 0.5) * size.x
-			var z := (float(zi) / rows - 0.5) * size.z
-			var world := surface.to_global(Vector3(x, 0.0, z))
-			world.y = terrain_surface_height_at(world.x, world.z) + 0.12
-			tool.set_uv(Vector2(float(xi) / columns, float(zi) / rows))
-			tool.add_vertex(surface.to_local(world))
-	for zi in range(rows):
-		for xi in range(columns):
-			var a := zi * (columns + 1) + xi
-			var b := a + 1
-			var c := a + columns + 1
-			var d := c + 1
-			for index in [a, b, c, b, d, c]:
-				tool.add_index(index)
+	var polygon := PackedVector2Array()
+	for corner in [Vector2(-0.5,-0.5), Vector2(0.5,-0.5), Vector2(0.5,0.5), Vector2(-0.5,0.5)]:
+		var point := surface.to_global(Vector3(corner.x * size.x, 0, corner.y * size.z))
+		polygon.append(Vector2(point.x, point.z))
+	var projector := preload("res://city_road_surface.gd")
+	for triangle in projector.cell_triangles(self, projector.bounds(polygon)):
+		for piece in Geometry2D.intersect_polygons(polygon, triangle):
+			for index in Geometry2D.triangulate_polygon(piece):
+				var point: Vector2 = piece[index]
+				var local := surface.to_local(Vector3(point.x, projector.sample(self, point) + 0.145, point.y))
+				tool.set_uv(Vector2(local.x / size.x + 0.5, local.z / size.z + 0.5))
+				tool.add_vertex(local)
 	tool.generate_normals()
 	surface.mesh = tool.commit()
 
@@ -1205,6 +1531,40 @@ func make_parks() -> void:
 				tree.name = "ParkTree"
 				tree.position = Vector3(offset.x,height_at(center.x+offset.x,center.y+offset.y)+0.05,offset.y)
 				park.add_child(tree)
+
+func is_diagonal_plot(center: Vector2) -> bool:
+	if not diagonal_roads_enabled:
+		return false
+	var half_size := 32.0 - road_width * 0.5 - sidewalk_width
+	var bounds := Rect2(center - Vector2.ONE * half_size, Vector2.ONE * half_size * 2.0)
+	var corners := [bounds.position, Vector2(bounds.end.x, bounds.position.y), bounds.end, Vector2(bounds.position.x, bounds.end.y)]
+	for segment in diagonal_road_segments:
+		var start := Vector2(segment.x, segment.y)
+		var finish := Vector2(segment.z, segment.w)
+		if start.distance_squared_to(finish) < 1.0:
+			continue
+		if bounds.has_point(start) or bounds.has_point(finish):
+			return true
+		for edge in 4:
+			if Geometry2D.segment_intersects_segment(start, finish, corners[edge], corners[(edge + 1) % 4]) != null:
+				return true
+	return false
+
+func make_diagonal_plot_grass() -> void:
+	var grass := StandardMaterial3D.new()
+	grass.albedo_color = Color(0.28, 0.45, 0.25)
+	grass.roughness = 1.0
+	var width := 64.0 - road_width - sidewalk_width * 2.0
+	for x in range(-96, 97, 64):
+		for z in range(-112, 145, 64):
+			if not is_diagonal_plot(Vector2(x, z)) or Vector2i(x, z) in park_block_centers:
+				continue
+			var plot := Node3D.new()
+			plot.name = "DiagonalGrassPlot_%d_%d" % [x, z]
+			plot.position = Vector3(x, 0, z)
+			$Parks.add_child(plot)
+			# Asphalt and sidewalks sit above this patch, leaving grassy wedges.
+			preload("res://city_surface_layout.gd").add_patches(self, plot, "Grass", preload("res://city_islands.gd").inner_pieces(self, Vector2(x, z)), sidewalk_height + 0.02, grass, sidewalk_width + 0.05)
 
 func make_buildings() -> void:
 	if building_model_paths.is_empty():
@@ -1255,8 +1615,13 @@ func make_buildings() -> void:
 	for i in range(mini(edge_building_count, edge_lots.size())):
 		prioritized_lots.append(edge_lots[i])
 	prioritized_lots.append_array(lots)
+	var diagonal_plot_counts: Dictionary = {}
 	for i in range(mini(building_count, prioritized_lots.size())):
 		var lot := prioritized_lots[i]
+		var plot_center := Vector2i(roundi(float(lot.x - 32) / 64.0) * 64 + 32, roundi(float(lot.y - 16) / 64.0) * 64 + 16)
+		var diagonal_plot := is_diagonal_plot(Vector2(plot_center))
+		if diagonal_plot and int(diagonal_plot_counts.get(plot_center, 0)) >= diagonal_plot_building_limit:
+			continue
 		var model_path: String = building_model_paths[rng.randi_range(0, building_model_paths.size() - 1)]
 		var template: PackedScene = load(model_path)
 		var body := StaticBody3D.new()
@@ -1309,6 +1674,8 @@ func make_buildings() -> void:
 		collision.shape = shape
 		collision.position.y = shape.size.y * 0.5
 		body.add_child(collision)
+		if diagonal_plot:
+			diagonal_plot_counts[plot_center] = int(diagonal_plot_counts.get(plot_center, 0)) + 1
 
 func make_sparse_block_fences() -> void:
 	# Keep fences in the existing cleared Buildings container on regeneration.
@@ -1354,6 +1721,8 @@ func make_sparse_block_fences() -> void:
 							rail.basis = Basis(axis, normal.cross(axis), normal)
 
 func fence_segment_clear(center: Vector2, half_size: Vector2, buildings: Array[Node]) -> bool:
+	if distance_to_diagonal_road(center) < diagonal_road_width * 0.5 + sidewalk_width + half_size.length() + 1.0:
+		return false
 	# Stay inside the fog wrap and off building foundations/stairs and serving pads.
 	if absf(center.x) + half_size.x > wrap_edge - 3.0 or absf(center.y) + half_size.y > wrap_edge - 3.0:
 		return false
@@ -1410,6 +1779,8 @@ func building_exterior_direction(lot: Vector2i) -> Vector2:
 	return Vector2(0.0, -1.0)
 
 func building_clears_street_fixtures(position: Vector3, half_width: float) -> bool:
+	if distance_to_diagonal_road(Vector2(position.x, position.z)) < diagonal_road_width * 0.5 + sidewalk_width + half_width * 1.42 + 1.0:
+		return false
 	var keepout := half_width + street_fixture_clearance
 	for fixture in $StreetSigns.get_children():
 		if fixture.name.begins_with("StreetLight") and absf(position.x - fixture.position.x) < keepout and absf(position.z - fixture.position.z) < keepout:

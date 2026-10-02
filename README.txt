@@ -1,6 +1,6 @@
-STREET KITCHEN - TRUCK PLAYGROUND
+OnTheFly
 
-Run Street_Kitchen_Windows/Street_Kitchen.exe, or import project.godot into Godot 4.7.2 and press F6/F5.
+Run OnTheFly_Windows/OnTheFly.exe, or import project.godot into Godot 4.7.2 and press F6/F5.
 
 HILLY CITY SCENE
 Choose Hilly city on the main menu, or open procedural_city.tscn in Godot.
@@ -11,7 +11,7 @@ Select the ProceduralCity node in the editor to adjust terrain size, hill
 height, road tile size, building count, model paths, or turn off randomization
 and set a fixed seed. Roads and buildings are generated scene objects at run
 time; their templates and licenses are in assets/kenney_city. The original
-flat playground remains available through New game.
+flat playground remains available through Single player.
 To package source changes later, run ../Update_Project_Zip.ps1 in PowerShell.
 It rebuilds the project ZIP without Godot's generated .godot cache.
 
@@ -263,7 +263,7 @@ remain available; new rounds reset them. Edit serving_duration,
 attraction_radius, and patron_capacity on each serving Area3D.
 The orange repair pad remains a repair and upgrade station.
 
-Patrons predict approaching truck movement and jump sideways out of its
+Patrons predict approaching truck movement and dodge sideways out of its
 path, including when reversing. Their walk, dodge, jump, and interest
 recovery settings are exposed on the patron scene. The wider kitchen
 camera keeps the serving window and nearby patrons visible together.
@@ -308,3 +308,134 @@ carries into the next round when selecting New round / N. The timer,
 earnings goal, pads, and patrons reset. New game from the main menu
 starts a fresh run with $200 plus starting luck. Balance is kept while
 the game is open; quitting the application ends that run.
+
+
+PERFORMANCE DIAGNOSTICS
+F3 or controller View opens a frame-time graph and FPS/p95/worst-frame timings.
+The green budget lines are 16.7 ms (60 FPS) and 33.3 ms (30 FPS); red spikes
+exceed 33.3 ms. Engine process/physics and script timings measure CPU work,
+not GPU time. Draw calls/primitives help identify rendering-heavy views.
+Capture frame timings records 20 seconds to user://performance as CSV. Click
+Open performance captures to find the files. Start a capture before loading
+Hilly City to include its loading-stage names and stalls in the recording.
+Disable Nearby traffic simulation or Optimized multiplayer snapshots to
+compare performance under the same view. Snapshot comparisons run on the host.
+Distant traffic keeps following routes at 5 Hz without collision participation,
+suspension, lights or truck avoidance. Cars wake within 90 metres of any player
+and sleep beyond 115 metres. Pursuing police and dynamic wrecks stay active.
+Car meshes hide beyond 240 metres; bay displays update only while visible and
+only when their displayed state changes. Clients use host traffic snapshots.
+
+MULTIPLAYER PROTOTYPE
+GITHUB RELEASE UPDATES
+The Windows distribution includes Launch_OnTheFly.cmd and Update_Game.ps1
+for stable release updates from plachenko/OnTheFly. The in-game Updates button
+opens this launcher after exiting the game. See tools/updater/UPDATE_GUIDE.txt.
+Prepare a new release with tools/Publish_Update.ps1 -Version 0.4.1 -Build;
+use -Publish with GH_TOKEN or GITHUB_TOKEN set to upload the tested package.
+
+Service bays now run synchronized 45-second service waves with 30-second
+repair/restock breaks. Opening shop does not restart a bay's timer. Closed
+waves do not charge expired-bay fees. The flat map starts with six service bays
+and customer spawns on both sides. One used bay retires each wave until the
+count reaches lobby size minus one (minimum one). That count holds for one
+wave, then loses one bay per wave until one remains. Open shops are exclusive
+and ignore opposing truck collisions until they pack up, including breaks.
+The Game Inspector's Service Waves section controls service_window_seconds,
+service_pause_seconds, and service_final_hold_waves. The default round length
+is now 900 seconds to allow the dwindling-bay endgame; earnings goals remain.
+
+Host multiplayer / Join multiplayer enters a lobby with up to four trucks.
+Choose a truck color and click preset message buttons; messages rise as speech
+bubbles for one second, then fade out. Guests toggle Ready (red/green lights).
+Ready guests can drive around the shared lobby playground while waiting.
+The host can click Drive lobby. Lobby Menu reopens the menu without changing
+readiness; Unready stops the truck and reopens the menu. Driving-mode preset
+messages appear above the sender's truck in world space, rising and fading.
+Lobby driving does not consume match time, start service waves, or earn money.
+Only the host can select Plaza or Hilly City and Start Session after all
+guests are ready. Changing the level clears guest readiness. Each truck keeps
+separate earnings. The shared Hilly City uses a fixed synchronized map seed.
+Offline Single player
+and Hilly city still work. For two game instances on one PC, host on UDP 24567
+and join 127.0.0.1:24567. On a LAN, join the host computer's IPv4 address.
+The Windows prototype is ../OnTheFly_Windows/OnTheFly.exe;
+see that folder's README.txt for connection instructions and prototype limits.
+Steam transport is not yet included.
+
+NetworkSession owns connection/lifecycle, MultiplayerGame reuses the existing
+Game rules with independent player accounts, and MultiplayerPatrons routes
+shared customer orders to the owning truck. The host simulates physics and
+validates sales and shop actions. Clients interpolate full-state snapshots.
+Use --headless -- --multiplayer-smoke-test --mp-host / --mp-client to test the
+packaged executable's real host/client paths. Add --mp-four to run four instances.
+
+CITY ROAD RULES
+Most city and diagonal roads use double solid yellow lines. Selected city
+roads at x=64 and z=-80 widen on one side with a broken yellow passing-side
+line. Approaches split into left-only and through lanes; combined straight/left
+arrows appear where the left turn enters two lanes. The x=-64 avenue runs
+only +Z; the z=112 street runs only -X, with two lanes, white separators and
+direction signs. Traffic follows one-way signs and lane arrows, and reserves
+passing for permitted streets. Curbs, signals and poles move with wider edges.
+Road paint is batched rather than spawning a mesh for every dash.
+
+STREET NAVIGATION HUD
+Past, current and next streets remain visible in one row. Crossings grow toward the middle as you approach, take the center when reached, and travel left afterward. Backing up brings the past crossing toward the middle. A U-turn rotates and swaps the past and next cards. Each player follows their own truck.
+
+PARKING CLEARANCE AND TICKS
+City bays default to 10 metres long and use short side ticks with 0.2-metre gaps,
+without a filled box or continuous outline. Generated service zones match these
+footprints and show colored ticks. Placement computes a valid range per lane:
+the leading painted bay edge stays at least one full bay length before the
+nearest stop line or directional arrow, and the rear stays clear of crosswalks.
+An empty valid range produces no bay. Short blocks no longer use three-bay rows.
+In Street Parking, parking_stop_line_clearance_lengths increases the reserved
+gap; parking_marker_gap controls the small gaps between painted ticks.
+
+PERFORMANCE LAB
+Open Performance Lab from the main menu for an empty plane and fly camera.
+Hold RMB and use WASD/QE; Shift speeds up, wheel changes speed, Tab hides panels.
+Click the plane to choose a spawn origin. Instance cubes, cars, truck models,
+props, buildings or a custom res:// scene. Choose batch size, spacing and scale;
+compare a single-frame batch against spawning spread across frames. Render-only,
+scene physics, static bounds and dynamic bounds isolate rendering/physics costs.
+Prop scripts are optional. Clear cancels spawning and restores the empty baseline.
+Live frame graph, load/spawn timings and post-spawn frame peaks help find hitches.
+Record a 20-second CSV capture with item load/spawn/clear timings for comparison.
+
+
+PATRON DODGES
+Patrons are 20% larger, including colliders and raised status labels. Random
+avoidance is 90% grounded running with occasional low hops. Escape directions
+vary sideways/diagonally while clearing the truck laterally. 60% favor progress
+toward the current queue, crosswalk or wandering destination. Walls are checked
+before dodging; a blocked route does not trigger an in-place jump. Crowd steering
+does not cancel an active escape. dodge_hop_chance and destination_dodge_chance
+are adjustable in patron.gd alongside dodge speeds and forced avoidance styles.
+ROAD-FIRST CITY SURFACES
+Roads reserve their footprint first, including one-sided widened lanes and
+finite diagonal streets. Terrain beneath roads is recessed; asphalt has its
+own matching collision surface. Grass and park paths are polygon-clipped out
+of road/sidewalk corridors rather than hidden beneath asphalt. Rounded block
+sidewalks are also clipped where diagonals cross. Grass islands have matching
+collision, preventing patrons from dropping into the recessed road bed.
+Lamp posts sit beyond the sidewalk on small gravel pads, batched into one mesh.
+Grass tufts avoid the road, sidewalk and lamp gravel footprint.
+
+VISIBLE PEDESTRIAN ISLANDS
+Diagonal road connections sit 16 metres farther along the blocks. Affected
+blocks use closed rounded pavement islands with raised curb faces and complete
+light curb outlines. Grass centers sit within those borders; partial curb
+fragments and overlapping diagonal sidewalk strips have been removed.
+Three zebra crossings connect the enclosed island sections, with physical curb
+ramps at both ends and pedestrian WAIT/WALK timing. Patrons use the actual
+crossing endpoints. Asphalt shoulders close the gutter gap at island borders.
+
+CONTINUOUS ROADS AND PARKING MARKINGS (0.4.12)
+Grid and diagonal streets share one terrain-aligned asphalt mesh and collider.
+Crosswalk paint, parking paint and island ramps follow the same terrain facets.
+Road contacts do not cause crash damage; walls and vehicles still do.
+Single parking bays have solid white boxes. Adjacent ordinary bays use curbside
+row brackets. Service bays have colored diagonal hatching and dashed colored
+borders inside their white outline; service availability still controls color.

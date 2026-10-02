@@ -1,0 +1,48 @@
+OnTheFly - GITHUB RELEASE UPDATES
+
+PLAYERS
+Unzip the whole game folder into a location you can write to (for example
+Documents\OnTheFly). Open Launch_OnTheFly.cmd. It checks stable
+GitHub Releases for plachenko/OnTheFly. Check for Updates works manually too.
+Click Install Update, then Play. Without Internet access, Play still works.
+The repository is editable in the launcher. User settings and saves stay in
+Godot's user data folder. The player's updater_config.json is preserved.
+The in-game Updates button closes the game and opens the launcher.
+Both multiplayer players should update to the same release before joining.
+
+PUBLISHING
+Prepare a release and rebuild the Windows executable:
+  .\Publish_Update.ps1 -Version 0.4.1 -Build
+
+Test Releases\v0.4.1\OnTheFly_Windows.zip locally before publishing.
+When ready, set GH_TOKEN or GITHUB_TOKEN in your shell to a GitHub token with
+Contents: write for plachenko/OnTheFly, then run:
+  .\Publish_Update.ps1 -Version 0.4.1 -Publish -NotesFile .\Release_Notes.txt
+
+NotesFile is optional. Use -Repository owner/repo for another repository,
+-GodotPath for another Godot editor, and -TargetCommitish for an exact commit
+or branch. Without -Publish the script only prepares local files. With
+-Publish it creates a draft, uploads ZIP and checksum, and publishes after
+both uploads finish. Existing release tags are not overwritten. A failed
+upload leaves a draft for recovery. Reuse the same locally tested build by
+omitting -Build when publishing. Do not commit your token or ship it to players.
+
+RELEASE FORMAT
+Stable tags use vMAJOR.MINOR.PATCH (for example v0.4.1).
+Assets must be OnTheFly_Windows.zip and OnTheFly_Windows.zip.sha256.
+The ZIP contains flat application files and release_manifest.json. GitHub's
+automatic source-code ZIP is not an installable game update. Drafts and
+prereleases are skipped. The updater requires a strictly newer version.
+The client supports public repositories; private release assets require an
+additional authentication flow. No GitHub credentials are stored in the game.
+The checksum detects corrupt downloads; repository owners control the code
+distributed by updates. Only configure repositories you trust.
+
+INSTALLATION
+The updater refuses to install while the local game is running. It verifies
+the checksum, rejects unknown ZIP paths, checks version/platform, stages files,
+backs up replaced files, and restores them if installation fails. It retains
+the player's repository settings and leaves unrelated files alone. If Windows
+blocks rollback, the recovery backup is kept and its location is displayed.
+The currently running launcher can update its own on-disk script; reopen the
+launcher after updating to pick up changes to the launcher itself.

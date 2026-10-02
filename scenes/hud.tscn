@@ -94,7 +94,7 @@ offset_right = 18.0
 offset_bottom = 12.0
 theme_override_font_sizes/font_size = 25
 theme_override_colors/font_color = Color(0.9490196, 0.8980392, 0.77254903, 1)
-text = "STREET KITCHEN"
+text = "OnTheFly"
 
 [node name="@Label@162" type="Label" parent="Layout/TitlePanel" unique_id=350330665]
 layout_mode = 0
@@ -104,7 +104,7 @@ offset_right = 19.0
 offset_bottom = 49.0
 theme_override_font_sizes/font_size = 14
 theme_override_colors/font_color = Color(0.5372549, 0.78431374, 0.7490196, 1)
-text = "TRUCK PLAYGROUND"
+text = "FOOD TRUCK RACING"
 
 [node name="ControlsPanel" type="ColorRect" parent="Layout" unique_id=82681038]
 layout_mode = 0
@@ -123,7 +123,7 @@ offset_right = 26.0
 offset_bottom = 16.0
 theme_override_font_sizes/font_size = 18
 theme_override_colors/font_color = Color(0.9490196, 0.8980392, 0.77254903, 1)
-text = "RT/LT Drive   B/X Brake   Stick Steer   D-pad Left/Right Signal   Up Lights   Down Hazards (twice: FSD)   A Kitchen   Start Pause"
+text = "RT/LT Drive   B/X Brake + Steer: Power slide   Stick Steer   D-pad Left/Right Signal   Up Lights   Down Hazards (twice: FSD)   A Kitchen   Start Pause"
 
 [node name="@Label@165" type="Label" parent="Layout/ControlsPanel" unique_id=1877974997]
 layout_mode = 0
@@ -133,7 +133,7 @@ offset_right = 26.0
 offset_bottom = 48.0
 theme_override_font_sizes/font_size = 15
 theme_override_colors/font_color = Color(0.5372549, 0.78431374, 0.7490196, 1)
-text = "Keyboard: WASD / Space brake / J,L signals / K hazards (twice: FSD) / H lights / E kitchen / R reset   •   Right stick or mouse: camera"
+text = "Keyboard: WASD / Space brake + steer: power slide / J,L signals / K hazards (twice: FSD) / H lights / E kitchen / R reset   •   Right stick or mouse: camera"
 
 [node name="StatusLabel" type="Label" parent="Layout/ControlsPanel" unique_id=2125687951]
 layout_mode = 0
@@ -156,6 +156,20 @@ theme_override_font_sizes/font_size = 30
 theme_override_colors/font_color = Color(0.9490196, 0.8980392, 0.77254903, 1)
 text = "0 km/h"
 
+[node name="HeadingLabel" type="Label" parent="Layout"]
+layout_mode = 0
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -360.0
+offset_top = 33.0
+offset_right = -215.0
+offset_bottom = 71.0
+theme_override_font_sizes/font_size = 24
+theme_override_colors/font_color = Color(0.9490196, 0.8980392, 0.77254903, 1)
+text = "HDG  N"
+horizontal_alignment = 2
+mouse_filter = 2
+
 [node name="LoadLabel" type="Label" parent="Layout" unique_id=1603543532]
 layout_mode = 0
 offset_left = 24.0
@@ -167,6 +181,19 @@ theme_override_colors/font_color = Color(0.9490196, 0.8980392, 0.77254903, 1)
 theme_override_colors/font_shadow_color = Color(0.07058824, 0.19607843, 0.21960784, 1)
 theme_override_constants/shadow_offset_x = 1
 theme_override_constants/shadow_offset_y = 1
+
+[node name="CameraPoseLabel" type="Label" parent="Layout"]
+visible = false
+layout_mode = 0
+offset_left = 24.0
+offset_top = 180.0
+offset_right = 850.0
+offset_bottom = 305.0
+theme_override_font_sizes/font_size = 16
+theme_override_colors/font_color = Color(1, 0.95, 0.8, 1)
+theme_override_colors/font_outline_color = Color(0.02, 0.03, 0.05, 0.95)
+theme_override_constants/outline_size = 5
+mouse_filter = 2
 
 [node name="DamagePanel" type="Panel" parent="Layout" unique_id=1655542133]
 layout_mode = 0
@@ -555,6 +582,17 @@ offset_right = 1255.0
 offset_bottom = 302.0
 theme_override_font_sizes/font_size = 19
 text = "Pause / Start"
+
+[node name="FreeCameraButton" type="Button" parent="Layout"]
+layout_mode = 0
+offset_left = 1090.0
+offset_top = 310.0
+offset_right = 1255.0
+offset_bottom = 350.0
+theme_override_font_sizes/font_size = 18
+toggle_mode = true
+tooltip_text = "C: toggle • Mouse: look • WASD: fly • Q/E: down/up • F: focus truck • Shift: faster"
+text = "Free camera / C"
 
 [node name="PadMeter" type="Panel" parent="Layout" unique_id=1195326268]
 visible = false

@@ -10,6 +10,7 @@ static func spawn(parent: Node, at: Vector3, size: float, label: String = "Explo
 	card.set_meta("explosion_size", size)
 	parent.add_child(card)
 	card.global_position = at
+	preload("res://comic_burst.gd").spawn(parent, at + Vector3.UP * size * 0.22, "BOOM!", 0.48, size * 0.65)
 	return card
 
 func _ready() -> void:

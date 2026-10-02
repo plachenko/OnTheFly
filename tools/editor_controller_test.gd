@@ -1,0 +1,45 @@
+extends SceneTree
+
+func _initialize() -> void:
+	run.call_deferred()
+
+func run() -> void:
+	var motion = load("res://addons/mcon_viewport/camera_motion.gd")
+	assert(motion.stick(Vector2(0.1, 0.05), 0.18) == Vector2.ZERO)
+	assert(motion.stick(Vector2(0, -1), 0.18).is_equal_approx(Vector2(0, -1)))
+	var pose: Transform3D = motion.fly(Transform3D.IDENTITY, Vector2(0, -1), Vector2.ZERO, 0.0, 12.0, 1.0)
+	assert(pose.origin.is_equal_approx(Vector3(0, 0, -12)))
+	pose = motion.fly(pose, Vector2.ZERO, Vector2.ZERO, 1.0, 12.0, 1.0)
+	assert(is_equal_approx(pose.origin.y, 12.0))
+	pose = motion.fly(pose, Vector2.ZERO, Vector2(1, 1), 0.0, 12.0, 1.0)
+	assert(pose.basis.z.distance_to(Vector3.BACK) > 0.5)
+	assert(pose.basis.is_conformal())
+	pose = Transform3D(Basis.IDENTITY, Vector3(0, 0, 10))
+	pose = motion.orbit(pose, Vector3.ZERO, Vector2.ZERO, Vector2(1, 0), 12.0, 0.3)
+	assert(is_equal_approx(pose.origin.length(), 10.0))
+	assert((-pose.basis.z).dot(-pose.origin.normalized()) > 0.999)
+	pose = motion.orbit(pose, Vector3.ZERO, Vector2(0, -1), Vector2.ZERO, 12.0, 0.3)
+	assert(is_equal_approx(pose.origin.length(), 6.4))
+	var picking = load("res://addons/mcon_viewport/ray_selection.gd")
+	var scene := Node3D.new()
+	root.add_child(scene)
+	var near_mesh := MeshInstance3D.new()
+	near_mesh.mesh = BoxMesh.new()
+	scene.add_child(near_mesh)
+	near_mesh.position.z = -5
+	var far_mesh := MeshInstance3D.new()
+	far_mesh.mesh = BoxMesh.new()
+	scene.add_child(far_mesh)
+	far_mesh.position.z = -10
+	assert(picking.closest_mesh([far_mesh, near_mesh], Vector3.ZERO, Vector3.FORWARD, 100.0) == near_mesh)
+	assert(picking.closest_mesh([near_mesh], Vector3(5, 0, 0), Vector3.FORWARD, 100.0) == null)
+	assert(picking.closest_mesh([near_mesh], Vector3.ZERO, Vector3.FORWARD, 2.0) == null)
+	var preview = load("res://addons/mcon_viewport/selection_preview.gd")
+	var corners: PackedVector3Array = preview.corners(near_mesh.mesh.get_aabb(), near_mesh.global_transform)
+	assert(corners.size() == 8)
+	assert(preview.EDGES.size() == 12)
+	for corner in corners:
+		assert(absf(corner.z + 5.0) <= 0.51)
+	scene.free()
+	print("EDITOR CONTROLLER PASS: fly, orbit radius/focus/zoom, nearest mesh ray selection, miss and distance limit")
+	quit()

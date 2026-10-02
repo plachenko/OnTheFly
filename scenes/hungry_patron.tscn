@@ -7,8 +7,8 @@
 [ext_resource type="PackedScene" path="res://assets/kenney/skaterMaleA.glb" id="5_i41yd"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_tlqhk"]
-radius = 0.3
-height = 1.65
+radius = 0.36
+height = 1.98
 
 [node name="HungryPatron" type="CharacterBody3D" unique_id=1268751647]
 collision_layer = 2
@@ -16,17 +16,18 @@ floor_snap_length = 0.3
 script = ExtResource("1_xmfng")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1107819319]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.825, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.99, 0)
 shape = SubResource("CapsuleShape3D_tlqhk")
 
 [node name="Status" type="Label3D" parent="." unique_id=1295518929]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.15, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.55, 0)
 pixel_size = 0.0055
 billboard = 1
 text = "Hungry"
 font_size = 36
 
 [node name="VisualVariants" type="Node3D" parent="." unique_id=644835463]
+scale = Vector3(1.2, 1.2, 1.2)
 
 [node name="criminalMaleA" type="Node3D" parent="VisualVariants" unique_id=902949818 instance=ExtResource("2_lgh3h")]
 transform = Transform3D(0.3, 0, 0, 0, 0.43, 0, 0, 0, 0.43, 0, 0, 0)

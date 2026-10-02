@@ -55,6 +55,8 @@ func sync_video_audio(panel: Control) -> void:
 func _input(event: InputEvent) -> void:
     if not event is InputEventJoypadButton or event.button_index!=JOY_BUTTON_A:
         return
+    if get_node("/root/DebugMenu").is_view_held(event.device):
+        return
     var focused=get_viewport().gui_get_focus_owner()
     if not focused is BaseButton or not focused.is_visible_in_tree() or focused.disabled:
         return

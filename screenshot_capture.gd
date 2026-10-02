@@ -82,5 +82,16 @@ func capture_screenshot() -> void:
 	var save_error := image.save_png(path)
 	if save_error == OK:
 		print("Screenshot saved: ", ProjectSettings.globalize_path(path))
+		var scene := get_tree().current_scene
+		if is_instance_valid(scene) and scene.has_method("camera_view_state"):
+			var state: Dictionary = scene.camera_view_state()
+			state["screenshot"] = path.get_file()
+			var camera_path := path.get_basename() + ".camera.json"
+			var file := FileAccess.open(camera_path, FileAccess.WRITE)
+			if file:
+				file.store_string(JSON.stringify(state, "\t"))
+				print("Camera state saved: ", ProjectSettings.globalize_path(camera_path))
+			else:
+				push_error("Could not save screenshot camera state")
 	else:
 		push_error("Could not save screenshot: %s" % error_string(save_error))
