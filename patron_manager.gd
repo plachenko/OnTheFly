@@ -6,6 +6,8 @@ extends Node
 @export_range(0,1) var attraction_interest_threshold: float = .35
 @export_range(0,1) var interest_after_meal: float = .2
 @export var fed_cooldown: float = 25.0
+@export_range(0, 12) var outside_window_patrons := 3
+@export var outside_window_spawn_interval := 8.0
 var spawn_counts: Dictionary = {}
 var spawn_timers: Dictionary = {}
 var served_orders: int = 0
@@ -13,6 +15,7 @@ var last_sale: String = "No orders yet."
 @onready var level=get_parent()
 
 func _process(delta: float) -> void:
+    if not PerformanceDiagnostics.pedestrian_logic_enabled:return
     if not level.is_processing() or level.round_finished:return
     spawn_patrons(delta)
     var active=level.active_serving_pad()
@@ -29,34 +32,82 @@ func _process(delta: float) -> void:
                 var order=make_order(patron)
                 if order.total>0:patron.accept_order(active,order)
 
+@export var building_spawn_interval := 4.0
+var building_entrances: Array[Node3D] = []
+var next_entrance := 0
+var building_spawn_elapsed := 0.0
+
+func configure_building_entrances() -> void:
+    if not building_entrances.is_empty(): return
+    var city := level.get_node_or_null("ProceduralCity")
+    if city != null and city.generating: return
+    var anchors := level.get_node("PatronSpawns").get_children()
+    var buildings: Array = city.get_node("Buildings").get_children() if city != null else []
+    var used: Array = []
+    for index in mini(3, anchors.size()):
+        var anchor: Node3D = anchors[index]
+        var position := anchor.global_position
+        var nearest: Node3D
+        var gap := INF
+        for building in buildings:
+            if building in used: continue
+            var collision := building.get_node_or_null("BuildingCollision") as CollisionShape3D
+            if collision == null or not collision.shape is BoxShape3D: continue
+            var distance: float = building.global_position.distance_squared_to(anchor.global_position)
+            if distance < gap:
+                gap = distance
+                nearest = building
+        var marker := preload("res://patron_spawn.gd").new()
+        marker.name = "BuildingEntrance_%d" % (index + 1)
+        marker.spawn_interval = building_spawn_interval
+        marker.wander_radius = 4.0
+        marker.patron_limit = 4
+        if nearest != null:
+            used.append(nearest)
+            var collider: CollisionShape3D = nearest.get_node("BuildingCollision")
+            var box := collider.shape as BoxShape3D
+            var local := collider.to_local(anchor.global_position)
+            var half := box.size * 0.5
+            if absf(local.x / maxf(half.x, 0.1)) > absf(local.z / maxf(half.z, 0.1)):
+                local = Vector3((half.x + 1.5) * (1.0 if local.x >= 0 else -1.0), 0, clampf(local.z, -half.z, half.z))
+                marker.set_meta("wander_axis", collider.global_basis.z.normalized())
+            else:
+                local = Vector3(clampf(local.x, -half.x, half.x), 0, (half.z + 1.5) * (1.0 if local.z >= 0 else -1.0))
+                marker.set_meta("wander_axis", collider.global_basis.x.normalized())
+            position = collider.to_global(local)
+            marker.set_meta("building", str(nearest.name))
+        level.get_node("PatronSpawns").add_child(marker)
+        if city != null: position.y = city.height_at(position.x, position.z) + 0.1
+        marker.global_position = position
+        building_entrances.append(marker)
+
 func spawn_patrons(delta: float) -> void:
-    for point in level.get_node("PatronSpawns").get_children():
-        if level.get_node("Patrons").get_child_count()>=maximum_patrons:return
-        if spawn_counts.get(point,0)>=point.patron_limit:continue
-        spawn_timers[point]=spawn_timers.get(point,0.0)-delta
-        if spawn_timers[point]>0:continue
-        spawn_timers[point]=maxf(.1,point.spawn_interval)
-        var patron=patron_scene.instantiate()
-        patron.manager=self
-        patron.home_position=point.global_position
-        patron.wander_radius=point.wander_radius
-        var crossings=level.get_node_or_null("ProceduralCity/Crosswalks")
-        if crossings and crossings.get_child_count()>0:
-            var nearest: Node3D=null
-            var nearest_distance=INF
-            for crossing in crossings.get_children():
-                var gap=Vector2(crossing.global_position.x-point.global_position.x,crossing.global_position.z-point.global_position.z).length_squared()
-                if gap<nearest_distance:
-                    nearest_distance=gap
-                    nearest=crossing
-            patron.crosswalk=nearest
-        patron.sidewalk_min_z=point.sidewalk_min_z
-        patron.sidewalk_max_z=point.sidewalk_max_z
-        patron.interest=randf_range(minf(point.minimum_interest,point.maximum_interest),maxf(point.minimum_interest,point.maximum_interest))
-        patron.budget=randi_range(mini(point.minimum_budget,point.maximum_budget),maxi(point.minimum_budget,point.maximum_budget))
-        level.get_node("Patrons").add_child(patron)
-        patron.global_position=point.global_position+Vector3(0,0,randf_range(-1.5,1.5))
-        spawn_counts[point]=spawn_counts.get(point,0)+1
+    if not PerformanceDiagnostics.pedestrian_logic_enabled: return
+    configure_building_entrances()
+    if building_entrances.size() != 3: return
+    # A global cap prevents dense city settings from creating an ever-growing crowd.
+    if level.get_node("Patrons").get_child_count() >= mini(maximum_patrons, 12): return
+    building_spawn_elapsed += delta
+    if building_spawn_elapsed < building_spawn_interval: return
+    building_spawn_elapsed = 0.0
+    var point := building_entrances[next_entrance]
+    next_entrance = (next_entrance + 1) % 3
+    if spawn_counts.get(point, 0) >= point.patron_limit: return
+    var patron = patron_scene.instantiate()
+    patron.manager = self
+    patron.set_meta("spawn_point", point)
+    patron.home_position = point.global_position
+    patron.wander_radius = point.wander_radius
+    patron.wander_axis = point.get_meta("wander_axis", Vector3.FORWARD)
+    patron.interest = randf_range(0.65, 1.0)
+    patron.budget = randi_range(18, 32)
+    patron.position = level.get_node("Patrons").to_local(point.global_position)
+    spawn_counts[point] = spawn_counts.get(point, 0) + 1
+    patron.tree_exiting.connect(release_building_slot.bind(point))
+    level.get_node("Patrons").add_child(patron)
+
+func release_building_slot(point: Node3D) -> void:
+    spawn_counts[point] = maxi(0, spawn_counts.get(point, 0) - 1)
 
 func make_order(patron: Node) -> Dictionary:
     var remaining=patron.budget
@@ -89,12 +140,13 @@ func complete_order(patron: Node) -> bool:
     var total: int=patron.order.total
     level.money+=total
     level.money_earned+=total
+    level.award_experience(level.order_experience)
     served_orders+=1
-    last_sale="Sold %s  +$%d"%[", ".join(patron.order.items),total]
+    last_sale="Sold %s  +$%d / +%d XP"%[", ".join(patron.order.items),total,level.order_experience]
     patron.budget-=total
     patron.interest*=interest_after_meal
     patron.cooldown=fed_cooldown
     patron.has_eaten=true
     patron.cancel_order()
-    patron.get_node("Status").text="Fed!"
+    patron.begin_departure()
     return true

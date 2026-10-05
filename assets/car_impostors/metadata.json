@@ -1,0 +1,136 @@
+{
+	"angles": 16,
+	"cell": [
+		256,
+		192
+	],
+	"elevations": [
+		0.0,
+		20.0,
+		40.0,
+		60.0
+	],
+	"models": {
+		"res://assets/kenney_city/cars_rigged/delivery.glb": {
+			"atlas": "res://assets/car_impostors/delivery.png",
+			"bounds": [
+				1.5,
+				1.64999985694885,
+				3.24999976158142
+			],
+			"center": [
+				0.0,
+				0.824999928474426,
+				-0.0249999761581421
+			],
+			"normals": "res://assets/car_impostors/delivery_normals.png",
+			"world_height": 4.33559067249298
+		},
+		"res://assets/kenney_city/cars_rigged/hatchback-sports.glb": {
+			"atlas": "res://assets/car_impostors/hatchback-sports.png",
+			"bounds": [
+				1.29999995231628,
+				1.10000002384186,
+				2.85000014305115
+			],
+			"center": [
+				0.0,
+				0.550000011920929,
+				-0.0249999761581421
+			],
+			"normals": "res://assets/car_impostors/hatchback-sports_normals.png",
+			"world_height": 3.65201644897461
+		},
+		"res://assets/kenney_city/cars_rigged/police.glb": {
+			"atlas": "res://assets/car_impostors/police.png",
+			"bounds": [
+				1.5,
+				1.30000007152557,
+				3.09999966621399
+			],
+			"center": [
+				0.0,
+				0.650000035762787,
+				-0.000000119209289550781
+			],
+			"normals": "res://assets/car_impostors/police_normals.png",
+			"world_height": 4.04913539886475
+		},
+		"res://assets/kenney_city/cars_rigged/sedan-sports.glb": {
+			"atlas": "res://assets/car_impostors/sedan-sports.png",
+			"bounds": [
+				1.29999995231628,
+				1.09999990463257,
+				2.54999995231628
+			],
+			"center": [
+				0.0,
+				0.549999952316284,
+				-0.0249999761581421
+			],
+			"normals": "res://assets/car_impostors/sedan-sports_normals.png",
+			"world_height": 3.37298445701599
+		},
+		"res://assets/kenney_city/cars_rigged/sedan.glb": {
+			"atlas": "res://assets/car_impostors/sedan.png",
+			"bounds": [
+				1.5,
+				1.29999995231628,
+				2.54999995231628
+			],
+			"center": [
+				0.0,
+				0.649999976158142,
+				-0.0249999761581421
+			],
+			"normals": "res://assets/car_impostors/sedan_normals.png",
+			"world_height": 3.55463416576386
+		},
+		"res://assets/kenney_city/cars_rigged/suv.glb": {
+			"atlas": "res://assets/car_impostors/suv.png",
+			"bounds": [
+				1.5,
+				1.30000007152557,
+				2.69999980926514
+			],
+			"center": [
+				0.0,
+				0.650000035762787,
+				0.0
+			],
+			"normals": "res://assets/car_impostors/suv_normals.png",
+			"world_height": 3.68623094558716
+		},
+		"res://assets/kenney_city/cars_rigged/taxi.glb": {
+			"atlas": "res://assets/car_impostors/taxi.png",
+			"bounds": [
+				1.5,
+				1.49999988079071,
+				2.74999976158142
+			],
+			"center": [
+				0.0,
+				0.749999940395355,
+				-0.0249999761581421
+			],
+			"normals": "res://assets/car_impostors/taxi_normals.png",
+			"world_height": 3.82042174339294
+		},
+		"res://assets/kenney_city/cars_rigged/van.glb": {
+			"atlas": "res://assets/car_impostors/van.png",
+			"bounds": [
+				1.5,
+				1.35000002384186,
+				2.75000023841858
+			],
+			"center": [
+				0.0,
+				0.675000011920929,
+				-0.0249999761581421
+			],
+			"normals": "res://assets/car_impostors/van_normals.png",
+			"world_height": 3.75211312770844
+		}
+	},
+	"version": 1
+}

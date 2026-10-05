@@ -1,21 +1,31 @@
 extends RefCounted
 
 static func road_masks(city: Node3D, shoulder: float = 0.0) -> Array[PackedVector2Array]:
+	if city.road_mask_cache.has(shoulder):
+		return city.road_mask_cache[shoulder]
+	var masks := calculate_road_masks(city, shoulder)
+	city.road_mask_cache[shoulder] = masks
+	return masks
+
+static func calculate_road_masks(city: Node3D, shoulder: float) -> Array[PackedVector2Array]:
 	var masks: Array[PackedVector2Array] = []
 	var rules := preload("res://city_road_rules.gd")
 	var extent: float = city.road_visual_extent
-	for x in range(-128, 129, 64):
-		var left: float = x - city.road_width * 0.5 - rules.extra_width(true, x, -1) - shoulder
-		var right: float = x + city.road_width * 0.5 + rules.extra_width(true, x, 1) + shoulder
-		masks.append(rect_polygon(Rect2(Vector2(left, -extent), Vector2(right - left, extent * 2))))
-	for z in range(-144, 177, 64):
-		var low: float = z - city.road_width * 0.5 - rules.extra_width(false, z, -1) - shoulder
-		var high: float = z + city.road_width * 0.5 + rules.extra_width(false, z, 1) + shoulder
-		masks.append(rect_polygon(Rect2(Vector2(-extent, low), Vector2(extent * 2, high - low))))
+	for x in city.topology.verticals:
+		var left: float = x - city.road_width * 0.5 - rules.extra_width(true, x, -1, city) - shoulder
+		var right: float = x + city.road_width * 0.5 + rules.extra_width(true, x, 1, city) + shoulder
+		for span in city.topology.segments(true,x,extent,city.road_width*.5):
+			masks.append(rect_polygon(Rect2(Vector2(left, span.x-shoulder), Vector2(right-left, span.y-span.x+shoulder*2))))
+	for z in city.topology.horizontals:
+		var low: float = z - city.road_width * 0.5 - rules.extra_width(false, z, -1, city) - shoulder
+		var high: float = z + city.road_width * 0.5 + rules.extra_width(false, z, 1, city) + shoulder
+		for span in city.topology.segments(false,z,extent,city.road_width*.5):
+			masks.append(rect_polygon(Rect2(Vector2(span.x-shoulder,low), Vector2(span.y-span.x+shoulder*2, high-low))))
 	# Rounded curbs leave four pockets outside each block contour. The road
 	# must cover these too, instead of exposing the excavated terrain below.
-	for x in range(-96, 97, 64):
-		for z in range(-112, 145, 64):
+	for x in city.topology.xs:
+		for z in city.topology.zs:
+			if not city.topology.primary(Vector2(x,z)): continue
 			var contour: PackedVector2Array = city.rounded_block_contour(Vector2(x, z))
 			var block_bounds := preload("res://city_road_surface.gd").bounds(contour)
 			for pocket in remaining(rect_polygon(block_bounds), [contour]):
@@ -47,7 +57,7 @@ static func remaining(polygon: PackedVector2Array, masks: Array[PackedVector2Arr
 		if pieces.is_empty(): break
 	return pieces
 
-static func emit_polygon(city: Node3D, tool: SurfaceTool, polygon: PackedVector2Array, lift: float, origin: Vector3, subdivide: bool = true) -> void:
+static func emit_polygon(city: Node3D, tool: SurfaceTool, polygon: PackedVector2Array, lift: float, origin: Vector3, _subdivide: bool = true) -> void:
 	preload("res://city_road_surface.gd").emit_polygon(city, tool, polygon, lift, origin)
 
 static func emit_triangle(city: Node3D, tool: SurfaceTool, a: Vector2, b: Vector2, c: Vector2, lift: float, origin: Vector3, depth: int = 0) -> void:
@@ -68,6 +78,32 @@ static func emit_triangle(city: Node3D, tool: SurfaceTool, a: Vector2, b: Vector
 static func add_patch(city: Node3D, parent: Node3D, label: String, polygon: PackedVector2Array, lift: float, material: Material, shoulder: float) -> void:
 	add_patches(city, parent, label, [polygon], lift, material, shoulder)
 
+static func add_loading_patch(city: Node3D, parent: Node3D, label: String, polygon: PackedVector2Array, lift: float, material: Material, shoulder: float) -> void:
+	var pieces: Array[PackedVector2Array]
+	var worker := Thread.new()
+	var masks := road_masks(city, shoulder)
+	var loader := city.get_node_or_null("/root/LoadingScreen")
+	if loader != null and loader.busy and worker.start(remaining.bind(polygon, masks)) == OK:
+		while worker.is_alive():
+			await city.get_tree().process_frame
+		pieces = worker.wait_to_finish()
+	else:
+		pieces = remaining(polygon, masks)
+	if pieces.is_empty(): return
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for piece in pieces:
+		await preload("res://city_road_surface.gd").emit_polygon_loading(city, tool, piece, lift, parent.position)
+	tool.generate_normals()
+	var mesh := tool.commit()
+	mesh.surface_set_material(0, material)
+	var visual := MeshInstance3D.new()
+	visual.name = label
+	visual.mesh = mesh
+	parent.add_child(visual)
+	visual.create_trimesh_collision()
+	for body in visual.get_children(): body.set_meta("sidewalk", true)
+
 static func add_patches(city: Node3D, parent: Node3D, label: String, polygons: Array[PackedVector2Array], lift: float, material: Material, shoulder: float) -> void:
 	var pieces: Array[PackedVector2Array] = []
 	var masks := road_masks(city, shoulder)
@@ -83,6 +119,8 @@ static func add_patches(city: Node3D, parent: Node3D, label: String, polygons: A
 	visual.name = label
 	visual.mesh = mesh
 	parent.add_child(visual)
-	if label in ["Grass", "ParkGrass", "ParkPath_X", "ParkPath_Z", "Sidewalk"]:
+	if label in ["Grass", "BuildingAsphalt", "ParkGrass", "ParkPath_X", "ParkPath_Z", "Sidewalk"]:
 		visual.create_trimesh_collision()
 		for body in visual.get_children(): body.set_meta("sidewalk", true)
+
+

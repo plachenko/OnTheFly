@@ -208,6 +208,11 @@ $play.Add_Click({
     catch { $status.Text = $_.Exception.Message }
 })
 $form.Add_Shown({ if (-not $PreviewPath -and ($auto.Checked -or $CheckOnOpen) -and -not [string]::IsNullOrWhiteSpace($repoBox.Text)) { $check.PerformClick() } })
+$pollTimer = New-Object Windows.Forms.Timer
+$pollTimer.Interval = 300000
+$pollTimer.Add_Tick({ if ($auto.Checked -and $check.Enabled -and -not [string]::IsNullOrWhiteSpace($repoBox.Text)) { $check.PerformClick() } })
+$form.Add_Shown({ if (-not $PreviewPath) { $pollTimer.Start() } })
+$form.Add_FormClosed({ $pollTimer.Stop(); $pollTimer.Dispose() })
 if ($PreviewPath) {
     $form.Show(); $form.Refresh()
     $bitmap = New-Object Drawing.Bitmap($form.Width, $form.Height)

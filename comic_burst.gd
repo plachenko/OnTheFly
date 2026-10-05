@@ -42,8 +42,8 @@ static func lettering(word: String) -> Texture2D:
 		svg += '<path d="M8 70 L40 53 L23 12 L90 30 L130 3 L160 26 L215 8 L235 30 L305 10 L290 48 L365 70 L310 87 L337 130 L262 108 L225 137 L183 114 L117 135 L98 108 L30 125 L43 91 Z" fill="#ff752a" stroke="#21152c" stroke-width="6"/>'
 	for i in word.length():
 		var path: String = GLYPHS[word[i]]
-		var transform := 'translate(%d %d) skewX(-9) rotate(%d 30 35)' % [30 + i * 66, 31 + (i % 2) * 4, -5 if i % 2 == 0 else 4]
-		svg += '<g transform="%s"><path d="%s" transform="translate(4 6)" fill="#21152c" stroke="#21152c" stroke-width="9" stroke-linejoin="round"/><path d="%s" fill="#fff16b" fill-rule="evenodd" stroke="#21152c" stroke-width="5" stroke-linejoin="round"/><path d="M9 12 L16 9" stroke="#ffffff" stroke-width="3"/></g>' % [transform, path, path]
+		var placement := 'translate(%d %d) skewX(-9) rotate(%d 30 35)' % [30 + i * 66, 31 + (i % 2) * 4, -5 if i % 2 == 0 else 4]
+		svg += '<g transform="%s"><path d="%s" transform="translate(4 6)" fill="#21152c" stroke="#21152c" stroke-width="9" stroke-linejoin="round"/><path d="%s" fill="#fff16b" fill-rule="evenodd" stroke="#21152c" stroke-width="5" stroke-linejoin="round"/><path d="M9 12 L16 9" stroke="#ffffff" stroke-width="3"/></g>' % [placement, path, path]
 	svg += '</svg>'
 	var bitmap := Image.new()
 	bitmap.load_svg_from_string(svg)

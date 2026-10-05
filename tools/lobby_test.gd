@@ -29,8 +29,8 @@ func run() -> void:
 					session.send_chat("Good luck!")
 					selected = true
 				if session.can_start():
-					var guest_id: int = session.roster.keys().filter(func(id): return id != 1)[0]
-					assert(session.roster[guest_id].color == 4)
+					var branch_guest_id: int = session.roster.keys().filter(func(id): return id != 1)[0]
+					assert(session.roster[branch_guest_id].color == 4)
 					assert(session.chat_history.any(func(entry): return entry[1] == "Let's cook!"))
 					assert(session.start_session())
 			else:

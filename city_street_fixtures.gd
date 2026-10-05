@@ -1,7 +1,7 @@
 extends RefCounted
 
 # Shared terrain-clipped meshes keep fixtures flush even across terrain cells.
-static func generate(city: Node3D, verticals: Array[int], horizontals: Array[int], metal: Material, detail: Material) -> void:
+static func generate(city: Node3D, verticals: Array, horizontals: Array, metal: Material, detail: Material) -> void:
 	var rules := preload("res://city_road_rules.gd")
 	var centers: Array[Vector2] = []
 	for x in verticals:
@@ -19,16 +19,17 @@ static func generate(city: Node3D, verticals: Array[int], horizontals: Array[int
 			var junction := Vector3(x, 0, z)
 			if rules.has_approach_crosswalk(city, Vector3.RIGHT, junction):
 				var distance: float = (city.crosswalk_setback + 1.8 + rules.stop_boundary(city, Vector3.RIGHT, junction) - 0.21) * 0.5
-				city.add_sewer_grate(Vector2(x - distance, z + city.road_width * 0.5 + rules.extra_width(false, z, 1) - 0.8), false, metal, detail)
+				city.add_sewer_grate(Vector2(x - distance, z + city.road_width * 0.5 + rules.extra_width(false, z, 1, city) - 0.8), false, metal, detail)
 			if rules.has_approach_crosswalk(city, Vector3.BACK, junction):
 				var distance: float = (city.crosswalk_setback + 1.8 + rules.stop_boundary(city, Vector3.BACK, junction) - 0.21) * 0.5
-				city.add_sewer_grate(Vector2(x - city.road_width * 0.5 - rules.extra_width(true, x, -1) + 0.8, z - distance), true, metal, detail)
+				city.add_sewer_grate(Vector2(x - city.road_width * 0.5 - rules.extra_width(true, x, -1, city) + 0.8, z - distance), true, metal, detail)
 	var base := SurfaceTool.new()
 	var pattern := SurfaceTool.new()
 	base.begin(Mesh.PRIMITIVE_TRIANGLES)
 	pattern.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var placed: Array[Vector2] = []
 	for center in centers:
+		if not city.on_grid_road(center): continue
 		# Keep covers clear of diagonal center paint and island crossings.
 		if city.distance_to_diagonal_road(center) < city.diagonal_road_width * 0.5 + 1.0: continue
 		placed.append(center)
@@ -59,3 +60,4 @@ static func commit(city: Node3D, tool: SurfaceTool, label: String, material: Mat
 	visual.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	visual.set_meta("fixture_centers", centers)
 	city.get_node("Roads").add_child(visual)
+

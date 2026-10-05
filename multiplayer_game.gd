@@ -1,9 +1,9 @@
 extends "res://game.gd"
 
-const ECONOMY := ["money", "money_earned", "ingredients", "remaining_time", "round_finished", "round_won", "total_pad_fees", "starting_luck", "carried_balance"]
+const ECONOMY := ["money", "money_earned", "ingredients", "remaining_time", "round_finished", "round_won", "total_pad_fees", "starting_luck", "carried_balance", "experience", "license_points"]
 const ANALOG := ["accelerate", "reverse", "left", "right", "brake", "boost"]
-const EDGES := ["serve", "reset", "truck_headlights", "truck_hazard", "truck_signal_left", "truck_signal_right"]
-const VEHICLE := ["speed", "velocity", "steer", "rolling", "health", "opening", "deployed", "round_over", "headlights_on", "turn_signal", "hazards_on", "boost_fuel", "booster_owned", "drift_owned", "lift_owned", "armor_owned", "fsd_owned", "fsd_enabled", "message", "message_timer", "corner_load"]
+const EDGES := ["serve", "reset", "truck_headlights", "truck_hazard", "truck_signal_left", "truck_signal_right", "direction_signal_left", "direction_signal_right", "truck_horn"]
+const VEHICLE := ["speed", "velocity", "steer", "rolling", "health", "opening", "deployed", "round_over", "headlights_on", "turn_signal", "hazards_on", "boost_fuel", "booster_owned", "drift_owned", "lift_owned", "armor_owned", "fsd_owned", "fsd_enabled", "message", "message_timer", "corner_load", "horn_count", "travel_heading", "stationary_drifting", "tire_throttle", "tire_brake"]
 var trucks: Dictionary = {}
 var accounts: Dictionary = {}
 var incoming: Dictionary = {}
@@ -135,7 +135,7 @@ func apply_roster(roster: Dictionary) -> void:
 		caption.modulate = Color("ffe4a0") if id == local_player else Color("71e4e4")
 		body.add_child(caption)
 		trucks[id] = body
-		accounts[id] = {"money": starting_money, "money_earned": 0, "ingredients": starting_ingredients, "remaining_time": level_duration_seconds, "round_finished": false, "round_won": false, "total_pad_fees": 0, "starting_luck": 0, "carried_balance": false, "last_sale": "No orders yet.", "served_orders": 0}
+		accounts[id] = {"money": starting_money, "money_earned": 0, "ingredients": starting_ingredients, "remaining_time": level_duration_seconds, "round_finished": false, "round_won": false, "total_pad_fees": 0, "starting_luck": 0, "carried_balance": false, "last_sale": "No orders yet.", "served_orders": 0, "experience": 0, "license_points": 0}
 		incoming[id] = {}
 	if accounts.has(local_player): select_player(local_player)
 	if roster_changed: camera_started = false
@@ -155,7 +155,7 @@ func receive_controls(id: int, controls: Dictionary) -> void:
 
 func receive_action(id: int, action: String, argument: int) -> void:
 	if not trucks.has(id): return
-	if lobby_world and (not NetworkSession.roster.get(id, {}).get("ready", false) or action not in ["reset", "truck_headlights", "truck_hazard", "truck_signal_left", "truck_signal_right"]): return
+	if lobby_world and (not NetworkSession.roster.get(id, {}).get("ready", false) or action not in ["reset", "truck_headlights", "truck_hazard", "truck_signal_left", "truck_signal_right", "direction_signal_left", "direction_signal_right", "truck_horn"]): return
 	var previous := select_player(id)
 	if action in EDGES:
 		if not round_finished: truck.network_edges[action] = true
@@ -177,11 +177,11 @@ func collect_input() -> void:
 	var enabled := not get_tree().paused and not loading_intro_active and not free_camera_look and not round_finished
 	if lobby_world: enabled = enabled and lobby_driving_enabled()
 	var controls: Dictionary = {}
-	for action in ANALOG: controls[action] = Input.get_action_strength(action) if enabled else 0.0
+	for action in ANALOG: controls[action] = DrivingControls.action_strength(action) if enabled else 0.0
 	NetworkSession.send_controls(controls)
 	if enabled:
 		for action in EDGES:
-			if Input.is_action_just_pressed(action): NetworkSession.request_action(action)
+			if DrivingControls.direction_signal_just_pressed(action): NetworkSession.request_action(action)
 
 func _physics_process(delta: float) -> void:
 	if not NetworkSession.active or not is_instance_valid(service_waves) or trucks.is_empty(): return
@@ -214,16 +214,16 @@ func _physics_process(delta: float) -> void:
 	# Existing patrons use the owner of their order for queue position and payment.
 	for patron in $Patrons.get_children():
 		patron.set_physics_process(false)
-		var owner: int = patron.get_meta("player_id", local_player)
-		if patron.pad == null or (accounts.has(owner) and accounts[owner].round_finished):
-			owner = $PatronManager.closest_truck(patron).get_meta("player_id", local_player)
-			if accounts.has(owner) and accounts[owner].round_finished:
+		var player_id: int = patron.get_meta("player_id", local_player)
+		if patron.pad == null or (accounts.has(player_id) and accounts[player_id].round_finished):
+			player_id = $PatronManager.closest_truck(patron).get_meta("player_id", local_player)
+			if accounts.has(player_id) and accounts[player_id].round_finished:
 				for id in accounts:
 					if not accounts[id].round_finished:
-						owner = id
+						player_id = id
 						break
-		if not trucks.has(owner): owner = local_player
-		var previous := select_player(owner)
+		if not trucks.has(player_id): player_id = local_player
+		var previous := select_player(player_id)
 		patron._physics_process(delta)
 		select_player(previous)
 	snapshot_timer -= delta
@@ -250,8 +250,8 @@ func can_open_shop(body: CharacterBody3D) -> bool:
 func active_serving_pad() -> Node3D:
 	var pad: Node3D = super.active_serving_pad()
 	if pad != null:
-		var owner: int = $PatronManager.pad_owners.get(pad, 0)
-		if owner != 0 and owner != active_player: return null
+		var player_id: int = $PatronManager.pad_owners.get(pad, 0)
+		if player_id != 0 and player_id != active_player: return null
 	return pad
 
 func update_service_protection() -> void:
@@ -321,7 +321,7 @@ func make_snapshot() -> Dictionary:
 		if not patron.has_meta("network_id"):
 			patron_serial += 1
 			patron.set_meta("network_id", patron_serial)
-		customers[patron.get_meta("network_id")] = {"transform": patron.global_transform, "text": patron.get_node("Status").text, "animation": patron.visual_anim.current_animation, "variant": patron.active_visual.get_index()}
+		customers[patron.get_meta("network_id")] = {"transform": patron.global_transform, "text": patron.get_node("Status").text, "animation": patron.visual_anim.current_animation, "variant": patron.character_variant, "heading": patron.active_visual.rotation.y, "color": patron.appearance_color_index, "height": patron.height_scale, "fade_alpha": patron.fade_alpha, "animation_elapsed": patron.visual_anim.animation_elapsed if patron.billboard_visual else patron.visual_anim.current_animation_position}
 	var pads: Dictionary = {}
 	for pad in $ParkingPads.get_children():
 		pads[str(pad.name)] = {"remaining": pad.service_remaining, "started": pad.service_started, "expired": pad.expired, "duration": pad.serving_duration}
@@ -331,6 +331,8 @@ func make_snapshot() -> Dictionary:
 		if not is_instance_valid(body): continue
 		if PerformanceDiagnostics.optimized_snapshots and body.freeze and not body.is_in_group("traffic_motion") and not (body.has_method("knock_down") and body.fallen): continue
 		props[str(get_path_to(body))] = {"transform": body.global_transform, "fallen": body.get("fallen") if body.has_method("knock_down") else false}
+		if body.has_method("set_ambient_active"):
+			props[str(get_path_to(body))]["ambient_active"] = body.ambient_active
 		if body.has_method("get_hybrid_snapshot"):
 			props[str(get_path_to(body))]["hybrid"] = body.get_hybrid_snapshot()
 	var broken: Array[String] = []
@@ -354,13 +356,16 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 		service_waves.remaining = waves.remaining
 		service_waves.in_service = waves.in_service
 		service_waves.rotation.clear()
-		for name in waves.rotation:
-			var pad := $ParkingPads.get_node_or_null(NodePath(name))
+		for item_name in waves.rotation:
+			var pad := $ParkingPads.get_node_or_null(NodePath(item_name))
 			if pad != null: service_waves.rotation.append(pad)
 	for path in snapshot.get("props", {}):
 		var body := get_node_or_null(NodePath(path)) as RigidBody3D
 		if body == null: continue
 		body.global_transform = snapshot.props[path].transform
+		if body.has_method("set_ambient_active") and snapshot.props[path].has("ambient_active"):
+			body.set_ambient_active(snapshot.props[path].ambient_active)
+			body.set_physics_process(false)
 		if body.has_method("apply_hybrid_snapshot"):
 			body.apply_hybrid_snapshot(snapshot.props[path].get("hybrid", {}))
 		if body.has_method("knock_down"): body.fallen = snapshot.props[path].fallen
@@ -381,6 +386,8 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 		if not trucks.has(id): continue
 		var body: CharacterBody3D = trucks[id]
 		var state: Dictionary = snapshot.players[id]
+		if targets.has(id) and int(state.get("horn_count", 0)) > body.horn_count:
+			body.honk()
 		if not targets.has(id): body.global_transform = state.transform
 		targets[id] = state.transform
 		accounts[id] = state.account.duplicate(true)
@@ -397,13 +404,13 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 	if accounts.has(local_player):
 		active_player = 0
 		select_player(local_player)
-	for name in snapshot.pads:
-		var pad := $ParkingPads.get_node_or_null(NodePath(name))
+	for item_name in snapshot.pads:
+		var pad := $ParkingPads.get_node_or_null(NodePath(item_name))
 		if pad == null: continue
-		pad.service_remaining = snapshot.pads[name].remaining
-		pad.service_started = snapshot.pads[name].started
-		pad.expired = snapshot.pads[name].expired
-		pad.serving_duration = snapshot.pads[name].get("duration", service_window_seconds)
+		pad.service_remaining = snapshot.pads[item_name].remaining
+		pad.service_started = snapshot.pads[item_name].started
+		pad.expired = snapshot.pads[item_name].expired
+		pad.serving_duration = snapshot.pads[item_name].get("duration", service_window_seconds)
 		pad.refresh_service_sign()
 	for patron in $Patrons.get_children():
 		if not snapshot.customers.has(patron.get_meta("network_id", -1)): patron.queue_free()
@@ -414,12 +421,19 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 			patron = $PatronManager.patron_scene.instantiate()
 			patron.name = "Customer_%d" % id
 			patron.character_variant = state.variant
+			patron.appearance_color_index = state.get("color", 0)
+			patron.height_scale = state.get("height", 1.0)
 			patron.set_meta("network_id", id)
 			$Patrons.add_child(patron)
 			patron.set_physics_process(false)
 		patron.global_transform = state.transform
+		patron.set_fade(state.get("fade_alpha", 1.0))
 		patron.get_node("Status").text = state.text
 		if not state.animation.is_empty(): patron.play_visual(state.animation)
+		patron.active_visual.rotation.y = state.get("heading", 0.0)
+		if patron.billboard_visual:
+			patron.visual_anim.animation_elapsed = state.get("animation_elapsed", 0.0)
+			patron.visual_anim.update_frame()
 
 func interpolate_trucks(delta: float) -> void:
 	for id in targets:

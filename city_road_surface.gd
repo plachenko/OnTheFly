@@ -58,26 +58,40 @@ static func generate(city: Node3D, material: Material) -> void:
 	var mask_bounds: Array[Rect2] = []
 	var whole := bounds(masks[0])
 	for mask in masks:
+		await city.loading_checkpoint()
 		mask_bounds.append(bounds(mask))
 		whole = whole.merge(bounds(mask))
 	var tool := SurfaceTool.new()
 	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for triangle in cell_triangles(city, whole):
+		await city.loading_checkpoint()
 		var rect := bounds(triangle)
 		var covered: Array[PackedVector2Array] = []
 		for i in masks.size():
+			await city.loading_checkpoint()
 			if not rect.intersects(mask_bounds[i], true): continue
 			for overlap in Geometry2D.intersect_polygons(triangle, masks[i]):
+				await city.loading_checkpoint()
 				for piece in layout.remaining(overlap, covered): emit_piece(city, tool, piece, LIFT, Vector3.ZERO)
 				covered.append(overlap)
-	tool.index()
-	tool.generate_normals()
-	var mesh := tool.commit()
+	var finished: Array = await city.loading_job(city.finish_loading_mesh.bind(tool, true))
+	var mesh: ArrayMesh = finished[0]
 	mesh.surface_set_material(0, material)
 	var visual := MeshInstance3D.new()
 	visual.name = "Asphalt"
 	visual.mesh = mesh
 	visual.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	city.get_node("Roads").add_child(visual)
-	visual.create_trimesh_collision()
-	for body in visual.get_children(): body.set_meta("drivable_surface", true)
+	var body := StaticBody3D.new()
+	body.set_meta("drivable_surface", true)
+	visual.add_child(body)
+	var collider := CollisionShape3D.new()
+	collider.shape = finished[1]
+	body.add_child(collider)
+
+static func emit_polygon_loading(city: Node3D, tool: SurfaceTool, polygon: PackedVector2Array, lift: float, origin: Vector3) -> void:
+	if polygon.size() < 3: return
+	for triangle in cell_triangles(city, bounds(polygon)):
+		await city.loading_checkpoint()
+		for piece in Geometry2D.intersect_polygons(polygon, triangle):
+			emit_piece(city, tool, piece, lift, origin)

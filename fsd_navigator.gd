@@ -25,7 +25,7 @@ func stop() -> void:
 	waypoint_index = 0
 
 func destination_label() -> String:
-	return destination.name if is_instance_valid(destination) else "No destination"
+	return str(destination.name) if is_instance_valid(destination) else "No destination"
 
 func choose_destination() -> Area3D:
 	var level := get_parent().get_parent()

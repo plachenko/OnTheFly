@@ -44,6 +44,9 @@ func _physics_process(delta: float) -> void:
 			continue
 		found = true
 		var truck: Node3D = cop.truck
+		if truck.get("police_parking") != null and truck.police_parking.active:
+			stopped_time = 0.0
+			break
 		if willing_stop(cop) and truck.global_position.distance_to(cop.global_position) < 28.0:
 			stopped_time += delta
 			if stopped_time >= 2.0:
@@ -55,6 +58,8 @@ func _physics_process(delta: float) -> void:
 		pursuing = false
 
 func police_hit(truck: Node3D) -> void:
+	if truck.get("highway_transit") != null and truck.highway_transit.active: return
+	if truck.get("police_parking") != null and truck.police_parking.active: return
 	if not pursuing or hit_cooldown > 0.0:
 		return
 	hit_cooldown = 1.5
@@ -63,9 +68,10 @@ func police_hit(truck: Node3D) -> void:
 	if lightly_damaged:
 		resolve(truck, false)
 
-func resolve(truck: Node3D, voluntary: bool) -> void:
+func resolve(truck: Node3D, voluntary: bool, parking_fee: int = -1) -> void:
 	var scene: Node = truck.get_parent()
 	var fine := 0 if voluntary and prior_infractions == 0 else (25 if voluntary else 100)
+	if parking_fee >= 0: fine = parking_fee
 	var charged: int = mini(scene.money, fine)
 	scene.money -= charged
 	GameOptions.round_balance = scene.money
@@ -75,11 +81,23 @@ func resolve(truck: Node3D, voluntary: bool) -> void:
 	truck.message_timer = 8.0
 	pursuing = false
 	stopped_time = 0.0
+	release_cops()
+
+func evade(truck: Node3D) -> void:
+	pursuing = false
+	stopped_time = 0.0
+	truck.message = "CHASE EVADED — clear escape route!"
+	truck.message_timer = 5.0
+	release_cops(true)
+
+func release_cops(green_return: bool = false) -> void:
 	for cop in get_tree().get_nodes_in_group("traffic_motion"):
 		var circle := cop.get_node_or_null("PoliceCircle")
 		if circle == null or not circle.pursuing:
 			continue
 		circle.pursuing = false
+		if green_return:
+			circle.begin_green_return()
 		cop.set_police_lights_enabled(false)
 		# Resume a lane from the current position without snapping back to the old route.
 		cop.travel_axis = Vector3.BACK if absf(cop.global_basis.z.z) >= absf(cop.global_basis.z.x) else Vector3.RIGHT

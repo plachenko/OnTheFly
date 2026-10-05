@@ -3,8 +3,11 @@ extends RigidBody3D
 @export var minimum_impact_speed: float = 10.0
 var fallen: bool = false
 var visual: Node3D
-var height: float = 5.0
-var visual_scale: Vector3 = Vector3.ONE
+@export var height: float = 5.0
+@export var visual_scale: Vector3 = Vector3.ONE
+
+func _ready() -> void:
+	if visual == null: visual = get_parent() as Node3D
 
 func impact_knock_down(direction: Vector3, impact_speed: float) -> bool:
 	if fallen or impact_speed < minimum_impact_speed:

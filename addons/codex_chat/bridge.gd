@@ -28,10 +28,23 @@ static func find_codex() -> String:
 		for version in versions:
 			var candidate := bundled.path_join(version).path_join("codex.exe")
 			if FileAccess.file_exists(candidate): return candidate
+	# Microsoft Store desktop distributions bundle the CLI in the app package.
+	if OS.get_name() == "Windows":
+		var packages := OS.get_environment("ProgramFiles").path_join("WindowsApps")
+		var installed := DirAccess.get_directories_at(packages)
+		installed.reverse()
+		for package in installed:
+			if not package.begins_with("OpenAI.Codex_"): continue
+			for relative in ["app/resources/codex.exe", "app/resources/bin/codex.exe", "resources/codex.exe"]:
+				var candidate := packages.path_join(package).path_join(relative)
+				if FileAccess.file_exists(candidate): return candidate
 	return ""
 
 func start(executable: String) -> void:
 	stop()
+	if executable.get_file().to_lower().contains("godot"):
+		failed.emit("The selected executable is Godot. Select codex.exe in Settings, then reconnect.")
+		return
 	if not FileAccess.file_exists(executable):
 		failed.emit("Select your Codex executable in Settings.")
 		return

@@ -4,8 +4,9 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://d07yi2bmw0n7c"
 path.s3tc="res://.godot/imported/skaterFemaleA_skaterFemaleA.png-f2e88a9e2e537fe243599f43f8e19c82.s3tc.ctex"
+path.etc2="res://.godot/imported/skaterFemaleA_skaterFemaleA.png-f2e88a9e2e537fe243599f43f8e19c82.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 generator_parameters={
@@ -15,7 +16,7 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/kenney/skaterFemaleA_skaterFemaleA.png"
-dest_files=["res://.godot/imported/skaterFemaleA_skaterFemaleA.png-f2e88a9e2e537fe243599f43f8e19c82.s3tc.ctex"]
+dest_files=["res://.godot/imported/skaterFemaleA_skaterFemaleA.png-f2e88a9e2e537fe243599f43f8e19c82.s3tc.ctex", "res://.godot/imported/skaterFemaleA_skaterFemaleA.png-f2e88a9e2e537fe243599f43f8e19c82.etc2.ctex"]
 
 [params]
 

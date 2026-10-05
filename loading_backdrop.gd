@@ -1,67 +1,114 @@
-extends Control
+extends ColorRect
 
-var elapsed := 0.0
-var truck_x := 0.15
-var frozen := false
-var pattern_entry := 0.0
-var dark_entry := 0.0
+var animation_started_msec := 0
+var shader_clock_epoch_msec := 0
+var steering_offset := 0.0
+var steering_heading := 0.0
+var controlled := false
+var trails: Control
+var elapsed: float:
+	get: return float(Time.get_ticks_msec()-animation_started_msec)/1000.0
+var smoothing_at := -1.0
+var finish_travel_seconds := 1.5
+var pattern_entry := 0.0:
+	set(value):
+		pattern_entry = value
+		if material: material.set_shader_parameter("pattern_entry",value)
+var dark_entry := 0.0:
+	set(value):
+		dark_entry = value
+		if material: material.set_shader_parameter("dark_entry",value)
 
 func _ready() -> void:
-	resized.connect(queue_redraw)
+	shader_clock_epoch_msec = Time.get_ticks_msec()
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var shader_material := ShaderMaterial.new()
+	shader_material.shader = preload("res://loading_backdrop.gdshader")
+	material = shader_material
+	trails = preload("res://loading_tire_trail.gd").new()
+	trails.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	trails.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(trails)
+	var hint := Label.new()
+	hint.text = "Left stick / A, D: steer"
+	hint.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+	hint.add_theme_font_size_override("font_size",16)
+	hint.add_theme_color_override("font_color",Color("ffe4a0"))
+	add_child(hint)
+	hint.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+	hint.offset_left = 24
+	hint.offset_top = -112
+	hint.offset_right = 330
+	hint.offset_bottom = -86
+	resized.connect(update_size)
+	update_size()
+	reset()
 
-func _process(delta: float) -> void:
-	if not frozen:
-		elapsed += delta
-		truck_x = 0.12 + fmod(elapsed * 0.11, 0.76)
-	queue_redraw()
+func update_size() -> void:
+	material.set_shader_parameter("panel_size",size)
+	if is_instance_valid(trails): trails.reset()
 
 func reset() -> void:
-	elapsed = 0.0
-	frozen = false
+	animation_started_msec = Time.get_ticks_msec()
+	smoothing_at = -1.0
+	steering_offset = 0.0
+	steering_heading = 0.0
+	controlled = false
+	material.set_shader_parameter("run_started",(animation_started_msec-shader_clock_epoch_msec)/1000.0)
+	material.set_shader_parameter("smoothing_at",-1.0)
+	material.set_shader_parameter("steering_offset",0.0)
+	material.set_shader_parameter("steering_heading",0.0)
+	material.set_shader_parameter("controlled_tracks",false)
+	if is_instance_valid(trails):
+		trails.reset()
+		trails.hide()
 	pattern_entry = 0.0
 	dark_entry = 0.0
 	scale = Vector2.ONE
 	position = Vector2.ZERO
 
-func truck_center() -> Vector2:
-	return Vector2(size.x * truck_x, size.y * 0.88)
+func route_y(x: float) -> float:
+	return .74+smoothstep(.12,.8,x)*(.035*sin(x*23.0)+.018*sin(x*47.0))
 
-func _draw() -> void:
-	var w := size.x
-	var h := size.y
-	draw_rect(Rect2(Vector2.ZERO, size), Color("fff2d7"))
-	# Diagonal stripes enter from the right, then keep drifting left.
-	var stripe_height := h * 0.22
-	var stripe_y := -stripe_height * (1.0 - pattern_entry)
-	var pitch := 96.0
-	for index in range(-3, ceili(w / pitch) + 4):
-		var x := index * pitch - fmod(elapsed * 90.0, pitch) + w * (1.0 - pattern_entry)
-		draw_colored_polygon(PackedVector2Array([Vector2(x, stripe_y), Vector2(x + pitch * 0.5, stripe_y), Vector2(x + pitch * 0.5 - stripe_height, stripe_y + stripe_height), Vector2(x - stripe_height, stripe_y + stripe_height)]), Color("dd4435"))
-	# The entire lower half flies up only after the patterns have arrived.
-	var dark_y := h * 0.5 + h * 0.5 * (1.0 - dark_entry)
-	draw_rect(Rect2(0, dark_y, w, h * 0.5), Color("14161d"))
-	# The checker band enters from the left and keeps drifting right.
-	var tile := maxf(24.0, h * 0.045)
-	var checker_y := h * 0.91 + h * 0.09 * (1.0 - pattern_entry)
-	for row in 2:
-		for column in range(-2, ceili(w / tile) + 2):
-			var x := column * tile + fmod(elapsed * 90.0, tile * 2.0) - w * (1.0 - pattern_entry)
-			var color := Color("292b32") if (column + row) % 2 == 0 else Color("fff2d7")
-			draw_rect(Rect2(x, checker_y + row * tile, tile, tile), color)
-	# Keep the skyline and driving marker attached to the arriving panel.
-	var lower_offset := h * 0.5 * (1.0 - dark_entry)
-	var hills := PackedVector2Array([Vector2(0, h * 0.84)])
-	for index in 81:
-		var x := float(index) / 80.0
-		hills.append(Vector2(w * x, h * (0.76 - 0.045 * sin(x * TAU * 1.6) - 0.025 * sin(x * TAU * 3.5))))
-	hills.append(Vector2(w, h * 0.84))
-	for index in hills.size():
-		hills[index].y += lower_offset
-	draw_colored_polygon(hills, Color("292b32"))
-	for index in 17:
-		var x := w * float(index) / 16.0
-		var roof := h * (0.66 + 0.04 * sin(index * 2.7))
-		draw_rect(Rect2(x, roof + lower_offset, w * 0.032, h * 0.84 - roof), Color("292b32"))
-	var center := truck_center() + Vector2(0, lower_offset)
-	draw_rect(Rect2(center - Vector2(w * 0.023, h * 0.014), Vector2(w * 0.046, h * 0.028)), Color("ffe4a0"))
-	draw_line(Vector2(0, h * 0.905 + lower_offset), Vector2(w, h * 0.905 + lower_offset), Color("603725"), 2.0)
+func steer_loading_truck(delta: float, input: float) -> void:
+	if absf(input) > .08: controlled = true
+	var previous := steering_offset
+	var x := .12+.70*(1.0-exp(-elapsed/6.0))
+	var road := route_y(x)
+	# Keep the controllable truck below the map and above the checker band.
+	steering_offset = clampf(steering_offset+input*delta*.085,maxf(-.065,.69-road),minf(.065,.86-road))
+	var y_velocity := (steering_offset-previous)/maxf(delta,.001)
+	var speed := maxf(.025,.70/6.0*exp(-elapsed/6.0))
+	steering_heading = lerpf(steering_heading,atan2(y_velocity*size.y,speed*size.x),1.0-exp(-delta*9.0))
+	material.set_shader_parameter("steering_offset",steering_offset)
+	material.set_shader_parameter("steering_heading",steering_heading)
+	material.set_shader_parameter("controlled_tracks",controlled)
+
+func _process(delta: float) -> void:
+	if not is_visible_in_tree(): return
+	steer_loading_truck(delta,Input.get_axis("left","right"))
+	trails.visible = controlled
+	var x := .12+.70*(1.0-exp(-elapsed/6.0))
+	var spin := -1.0
+	if smoothing_at >= 0.0:
+		var travel := maxf(0.0,elapsed-smoothing_at)
+		x = lerpf(float(material.get_shader_parameter("smoothing_x")),.88,clampf(travel/finish_travel_seconds,0.0,1.0))
+		spin = travel-finish_travel_seconds
+	var y := route_y(x)+steering_offset
+	var heading := atan2((route_y(x+.001)-route_y(x-.001))*size.y,.002*size.x)+steering_heading
+	if spin >= 0.0:
+		var theta := spin*4.5
+		x = (.88*size.x+sin(theta)*30.0)/size.x
+		y = (route_y(.88)*size.y-30.0+cos(theta)*30.0)/size.y+steering_offset
+		heading = -theta+steering_heading
+	trails.add_tracks(Vector2(x*size.x,y*size.y),heading)
+
+func begin_smoothing() -> void:
+	if smoothing_at >= 0.0: return
+	smoothing_at = elapsed
+	var x := .12+.70*(1.0-exp(-elapsed/6.0))
+	finish_travel_seconds = clampf((.88-x)/.12,.7,2.0)
+	material.set_shader_parameter("smoothing_at",smoothing_at)
+	material.set_shader_parameter("smoothing_x",x)
+	material.set_shader_parameter("finish_travel_seconds",finish_travel_seconds)

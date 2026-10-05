@@ -80,6 +80,10 @@ func run() -> void:
 				Input.action_release("accelerate")
 				assert(world.accounts[1].money == 200)
 				assert(world.get_node("Patrons").get_child_count() > 0)
+				for patron in world.get_node("Patrons").get_children():
+					assert(patron.appearance_color_index in range(6))
+					assert(patron.height_scale >= 0.85 and patron.height_scale <= 1.15)
+					assert(patron.billboard_visual and patron.find_children("*", "Skeleton3D", true, false).is_empty())
 				print("MP CLIENT PASS: %d-truck roster, remote movement, personal earnings and compressed customer snapshots" % expected)
 				await create_timer(0.5).timeout
 				session.leave()

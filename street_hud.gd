@@ -24,14 +24,15 @@ var suppressed_crossing_key := ""
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	anchor_left = 0.5
-	anchor_right = 0.5
+	anchor_left = 0.12
+	anchor_right = 0.12
 	anchor_top = 1.0
 	anchor_bottom = 1.0
-	offset_left = -130
-	offset_right = 130
-	offset_top = -205
-	offset_bottom = -125
+	offset_left = 4
+	offset_right = 156
+	offset_top = -80
+	offset_bottom = -18
+	z_index = 4
 	var city := level.get_node_or_null("ProceduralCity")
 	if city != null: routes = preload("res://street_navigation.gd").roads(city)
 	current_card = make_card("CurrentStreet")
@@ -50,8 +51,8 @@ func make_card(title: String) -> PanelContainer:
 	var card := PanelContainer.new()
 	card.name = title
 	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	card.custom_minimum_size = Vector2(260, 76)
-	card.pivot_offset = Vector2(130, 38)
+	card.custom_minimum_size = Vector2(148, 54)
+	card.pivot_offset = Vector2(74, 27)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.025, 0.09, 0.10, 0.94)
 	style.border_color = Color("bde4c5")
@@ -65,7 +66,7 @@ func make_card(title: String) -> PanelContainer:
 	var label := Label.new()
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", 17)
+	label.add_theme_font_size_override("font_size", 15)
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(label)
 	add_child(card)

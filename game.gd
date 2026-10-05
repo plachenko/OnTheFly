@@ -12,10 +12,11 @@ extends Node3D
 @export var orbit: float = 0.0
 @export_range(0.18, 1.05) var pitch: float = 0.42
 @export_range(8.0, 25.0) var distance: float = 14.5
+@export var camera_vertical_offset: float = 0.0
 @export var camera_smoothing: float = 7.5
 @export var camera_height_smoothing: float = 2.5
 @export var speed_camera_response: float = 3.0
-@export var speed_camera_move_in: float = 3.0
+@export var slow_speed_camera_tighten: float = 2.0
 @export var speed_fov_increase: float = 12.0
 @export var camera_return_delay: float = 2.0
 @export var camera_return_speed: float = 9.0
@@ -27,8 +28,26 @@ var loading_intro_active := false
 var loading_intro_elapsed := -1.0
 var loading_intro_truck_physics := true
 var loading_intro_hud_visible := true
+var loading_intro_start: Transform3D
+var loading_intro_end: Transform3D
+var loading_intro_end_fov := 70.0
+var loading_intro_start_fov := 55.0
+var menu_intro := false
+var cinematic_camera: Camera3D
+
+func begin_menu_intro(from: Transform3D, from_fov: float, cinematic: Camera3D = null) -> void:
+	begin_loading_intro()
+	menu_intro = true
+	cinematic_camera = cinematic
+	if is_instance_valid(cinematic_camera): cinematic_camera.make_current()
+	loading_intro_start = from
+	loading_intro_start_fov = from_fov
+	play_loading_intro()
+	update_loading_intro(0.0)
 
 func begin_loading_intro() -> void:
+	menu_intro = false
+	loading_intro_start_fov = 55.0
 	loading_intro_active = true
 	loading_intro_elapsed = -1.0
 	loading_intro_truck_physics = truck.is_physics_processing()
@@ -36,6 +55,21 @@ func begin_loading_intro() -> void:
 	truck.set_physics_process(false)
 	$HUD.hide()
 	camera.make_current()
+	camera_spring_velocity = Vector3.ZERO
+	camera_height_velocity = 0.0
+	var frame_transform: Transform3D = truck.model.global_transform * truck.skeleton.get_bone_global_pose(truck.chassis)
+	camera_follow_focus = frame_transform.origin + Vector3(0, 1.8, 0)
+	orbit = camera_default_orbit
+	pitch = camera_default_pitch
+	distance = camera_default_distance
+	speed_camera_blend = 0.0
+	camera_started = false
+	update_follow_camera(0.0)
+	loading_intro_end = camera.global_transform
+	loading_intro_end_fov = camera.fov
+	camera.global_position = camera_follow_focus + Vector3.UP * 23.0 + truck.global_basis.z * 1.0
+	camera.look_at(camera_follow_focus)
+	loading_intro_start = camera.global_transform
 	update_loading_intro(0.0)
 
 func play_loading_intro() -> void:
@@ -44,26 +78,29 @@ func play_loading_intro() -> void:
 func update_loading_intro(delta: float) -> void:
 	if loading_intro_elapsed >= 0.0:
 		loading_intro_elapsed += delta
-	var fraction := clampf(loading_intro_elapsed / 3.0, 0.0, 1.0)
-	var focus: Vector3 = truck.global_transform * Vector3(0, 1.8, 0)
-	# The kitchen/service window is on the truck's positive X side.
-	var offset := Vector3(lerpf(14.0, 4.8, fraction), lerpf(3.0, 2.2, fraction), -0.5)
-	camera.global_position = truck.global_transform * offset
-	camera.look_at(focus)
-	camera.fov = 45.0
+	var fraction := clampf(loading_intro_elapsed / (2.4 if menu_intro else 2.7), 0.0, 1.0)
+	var blend := 1.0-pow(1.0-fraction,3) if menu_intro else smootherstep_intro(fraction)
+	var view: Camera3D = cinematic_camera if menu_intro and is_instance_valid(cinematic_camera) else camera
+	view.global_transform = loading_intro_start.interpolate_with(loading_intro_end, blend)
+	var rotation_bump := deg_to_rad(3.0)*sin(PI*fraction)*smoothstep(.3,.65,fraction)*(1.0-fraction)
+	view.global_basis = view.global_basis.rotated(Vector3.UP,-rotation_bump)
+	view.fov = lerpf(loading_intro_start_fov, loading_intro_end_fov, blend)
 	if fraction >= 1.0:
+		camera.global_transform = loading_intro_end
+		camera.fov = loading_intro_end_fov
+		camera.make_current()
+		if is_instance_valid(cinematic_camera): cinematic_camera.queue_free()
+		cinematic_camera = null
 		loading_intro_active = false
-		camera_started = false
+		camera_started = true
 		camera_spring_velocity = Vector3.ZERO
 		camera_height_velocity = 0.0
-		camera_follow_focus = truck.global_position + Vector3(0, 1.8, 0)
-		orbit = camera_default_orbit
-		pitch = camera_default_pitch
-		distance = camera_default_distance
-		update_follow_camera(0.0)
 		truck.set_physics_process(loading_intro_truck_physics)
 		$HUD.visible = loading_intro_hud_visible
 		loading_intro_finished.emit()
+func smootherstep_intro(t: float) -> float:
+	return t * t * t * (t * (t * 6.0 - 15.0) + 10.0)
+
 @export var camera_spring_stiffness: float = 65.0
 @export var camera_spring_damping: float = 9.0
 var camera_spring_velocity: Vector3 = Vector3.ZERO
@@ -83,7 +120,7 @@ func update_impact_shake(delta: float) -> void:
 	impact_shake = move_toward(impact_shake, 0.0, delta * 2.5)
 	var amplitude := impact_shake * impact_shake
 	camera.h_offset = sin(impact_shake_time * 83.0) * amplitude * 0.24
-	camera.v_offset = sin(impact_shake_time * 97.0 + 1.7) * amplitude * 0.18
+	camera.v_offset = camera_vertical_offset * (1.0 - kitchen_blend) + sin(impact_shake_time * 97.0 + 1.7) * amplitude * 0.18
 
 var camera_return_timer: float = 0.0
 var camera_default_orbit: float = 0.0
@@ -92,12 +129,16 @@ var camera_default_distance: float = 14.5
 var camera_clip_amount: float = 0.0
 var camera_follow_focus: Vector3 = Vector3.ZERO
 var speed_camera_blend: float = 0.0
-var camera_base_fov: float = 70.0
+var camera_base_fov: float = 60.0
 var kitchen_blend: float = 0.0
 var free_camera_look: bool = false
 var free_camera_heading: float = 0.0
 var free_camera_pitch: float = 0.0
 var free_camera_roll: float = 0.0
+var camera_reference_lock := false
+var camera_reference_transform := Transform3D.IDENTITY
+var camera_timeline_playing := false
+var previous_reference_camera: Camera3D
 @export var free_camera_speed: float = 20.0
 @export var joypad_camera_speed: float = 2.0
 @onready var damage_bar: ProgressBar = $HUD/Layout/DamagePanel/DamageBar
@@ -108,6 +149,32 @@ var free_camera_roll: float = 0.0
 @export var earnings_target: int = 150
 @export var food_menu: Array[Resource] = []
 var money_earned: int = 0
+var experience := 0
+var license_points := 0
+var progress_label: Label
+var license_contacts := {}
+@export var order_experience := 10
+@export var round_experience := 50
+
+func award_experience(amount: int) -> void:
+	if amount <= 0 or (NetworkSession.active and not multiplayer.is_server()): return
+	experience += amount
+	if not NetworkSession.active: PlayerProgress.update_progress(experience, license_points)
+
+func register_car_collision(driver: Node, car: Object, strength: float) -> bool:
+	if round_finished or strength < driver.damage_threshold or not is_instance_valid(car): return false
+	if NetworkSession.active and not multiplayer.is_server(): return false
+	var now := Time.get_ticks_msec()
+	for key in license_contacts.keys():
+		if license_contacts[key] <= now: license_contacts.erase(key)
+	var contact := "%d/%d" % [driver.get_instance_id(), car.get_instance_id()]
+	if license_contacts.has(contact): return false
+	license_contacts[contact] = now + 3000
+	license_points += 1
+	driver.message = "+1 LICENSE POINT · Car collision"
+	driver.message_timer = 2.5
+	if not NetworkSession.active: PlayerProgress.update_progress(experience, license_points)
+	return true
 var round_won: bool = false
 @export_range(0,25) var starting_luck_range: int = 10
 @export var repair_pad_path: NodePath = NodePath("ParkingPads/ParkingPad_04")
@@ -196,6 +263,7 @@ func advance_round(delta: float) -> void:
 	if money_earned>=maxi(1,earnings_target) or remaining_time <= 0.0:
 		round_won=money_earned>=maxi(1,earnings_target)
 		round_finished = true
+		if round_won: award_experience(round_experience)
 		truck.round_over = true
 		truck.speed = 0.0
 		truck.velocity = Vector3.ZERO
@@ -252,6 +320,17 @@ func is_loading_ready() -> bool:
 	return loading_ready
 
 func _ready() -> void:
+	if not NetworkSession.active:
+		experience = PlayerProgress.experience
+		license_points = PlayerProgress.license_points
+	progress_label = Label.new()
+	progress_label.name = "DriverProgress"
+	progress_label.position = Vector2(24, 112)
+	progress_label.add_theme_font_size_override("font_size", 16)
+	progress_label.add_theme_color_override("font_color", Color("ffe4a0"))
+	progress_label.add_theme_color_override("font_outline_color", Color("142329"))
+	progress_label.add_theme_constant_override("outline_size", 3)
+	$HUD.add_child(progress_label)
 	var generated_city := get_node_or_null("ProceduralCity")
 	if generated_city != null and generated_city.generating:
 		await generated_city.generation_finished
@@ -285,9 +364,15 @@ func _ready() -> void:
 	street_display.name = "StreetNavigation"
 	street_display.level = self
 	$HUD/Layout.add_child(street_display)
-	var touch_controls = load("res://mobile_controls.gd").new()
-	touch_controls.name = "MobileControls"
-	add_child(touch_controls)
+	var cockpit = preload("res://cockpit_hud.gd").new()
+	cockpit.name = "Cockpit"
+	cockpit.level = self
+	$HUD.add_child(cockpit)
+	# Retain menu nodes and status logic, replacing only the old driving chrome.
+	for old_name in ["TitlePanel", "ControlsPanel", "DrivingBand", "SpeedLabel", "HeadingLabel", "LoadLabel", "DamagePanel", "SessionPanel", "StreetNavigation", "BoostPanel"]:
+		var old_widget = $HUD/Layout.get_node_or_null(old_name)
+		if old_widget != null: old_widget.hide()
+	progress_label.hide()
 	camera_default_orbit = orbit
 	camera_default_pitch = pitch
 	camera_default_distance = distance
@@ -315,10 +400,22 @@ func set_free_camera_look(enabled: bool) -> void:
 	if enabled == free_camera_look:
 		return
 	if enabled:
+		var active_camera := get_viewport().get_camera_3d()
+		if active_camera != null and active_camera != camera:
+			previous_reference_camera = active_camera
+			camera.global_transform = active_camera.global_transform
+			camera.fov = active_camera.fov
+			camera.near = active_camera.near
+			camera.far = active_camera.far
+			camera.h_offset = active_camera.h_offset
+			camera.v_offset = active_camera.v_offset
+		camera.make_current()
 		free_camera_heading = camera.global_rotation.y
 		free_camera_pitch = camera.global_rotation.x
 		free_camera_roll = camera.global_rotation.z
 	else:
+		if is_instance_valid(previous_reference_camera): previous_reference_camera.make_current()
+		previous_reference_camera = null
 		orbit = camera_default_orbit
 		pitch = camera_default_pitch
 		camera_return_timer = 0.0
@@ -327,12 +424,13 @@ func set_free_camera_look(enabled: bool) -> void:
 		camera_follow_focus = truck.global_position + Vector3(0, 1.8, 0)
 		camera_height_velocity = 0.0
 	free_camera_look = enabled
+	if not enabled: camera_reference_lock = false
 	truck.manual_controls_enabled = not enabled
 	if enabled:
 		camera_clip_amount = 0.0
 		camera_clip_mask.material.set_shader_parameter("strength", 0.0)
-		camera.fov = camera_base_fov
 		kitchen_blend = 0.0
+		truck.get_node("KitchenCutaway").update_view(0.0, camera)
 	$HUD/Layout/FreeCameraButton.set_pressed_no_signal(enabled)
 	$HUD/Layout/FreeCameraButton.text = "Free camera: ON" if enabled else "Free camera / C"
 	$HUD/Layout/FreeCameraButton.tooltip_text = "C: toggle • Mouse: look • WASD: fly • Q/E: down/up • F: focus truck • Shift: faster"
@@ -340,6 +438,7 @@ func set_free_camera_look(enabled: bool) -> void:
 	camera_pose_label.visible = enabled
 	if enabled:
 		update_camera_pose_readout()
+	get_node("/root/ScreenshotCapture").refresh_camera_ui()
 
 func focus_free_camera_on_truck() -> void:
 	var target := truck.global_position + Vector3(0, 1.8, 0)
@@ -355,37 +454,71 @@ func move_free_camera(direction: Vector3, delta: float, faster: bool = false) ->
 	camera.global_position += movement.limit_length() * free_camera_speed * (3.0 if faster else 1.0) * delta
 
 func update_free_camera(delta: float) -> void:
+	if camera_timeline_playing:
+		update_camera_pose_readout()
+		return
+	if camera_reference_lock:
+		camera.global_transform = truck_camera_frame() * camera_reference_transform
+		free_camera_heading = camera.global_rotation.y
+		free_camera_pitch = camera.global_rotation.x
+		free_camera_roll = camera.global_rotation.z
 	var movement := Vector3(
 		float(Input.is_physical_key_pressed(KEY_D)) - float(Input.is_physical_key_pressed(KEY_A)),
 		float(Input.is_physical_key_pressed(KEY_E)) - float(Input.is_physical_key_pressed(KEY_Q)),
 		float(Input.is_physical_key_pressed(KEY_W)) - float(Input.is_physical_key_pressed(KEY_S)))
+	var look := Vector2(float(Input.is_physical_key_pressed(KEY_RIGHT)) - float(Input.is_physical_key_pressed(KEY_LEFT)), float(Input.is_physical_key_pressed(KEY_DOWN)) - float(Input.is_physical_key_pressed(KEY_UP)))
+	var pads := Input.get_connected_joypads()
+	if not pads.is_empty():
+		var pad: int = pads[0]
+		movement += Vector3(camera_deadzone(Input.get_joy_axis(pad, JOY_AXIS_LEFT_X)), maxf(0, Input.get_joy_axis(pad, JOY_AXIS_TRIGGER_RIGHT)) - maxf(0, Input.get_joy_axis(pad, JOY_AXIS_TRIGGER_LEFT)), -camera_deadzone(Input.get_joy_axis(pad, JOY_AXIS_LEFT_Y)))
+		look += Vector2(camera_deadzone(Input.get_joy_axis(pad, JOY_AXIS_RIGHT_X)), camera_deadzone(Input.get_joy_axis(pad, JOY_AXIS_RIGHT_Y)))
+	free_camera_heading -= look.x * joypad_camera_speed * delta
+	free_camera_pitch = clampf(free_camera_pitch - look.y * joypad_camera_speed * delta, -PI * .499, PI * .499)
 	camera.global_rotation = Vector3(free_camera_pitch, free_camera_heading, free_camera_roll)
 	move_free_camera(movement, delta, Input.is_physical_key_pressed(KEY_SHIFT))
+	if camera_reference_lock: camera_reference_transform = truck_camera_frame().affine_inverse() * camera.global_transform
 	update_camera_pose_readout()
+
+func camera_deadzone(value: float) -> float:
+	return signf(value) * maxf(0, absf(value) - .15) / .85
+
+func truck_camera_frame() -> Transform3D:
+	return Transform3D(truck.global_basis.orthonormalized(), truck.global_position)
+
+func set_camera_reference_lock(enabled: bool) -> void:
+	if enabled:
+		set_free_camera_look(true)
+		camera_reference_transform = truck_camera_frame().affine_inverse() * camera.global_transform
+	camera_reference_lock = enabled
 
 func vector_values(value: Vector3) -> Array:
 	return [value.x, value.y, value.z]
 
-func camera_view_state() -> Dictionary:
+func camera_view_state(camera_override: Camera3D = null) -> Dictionary:
+	var view: Camera3D = camera_override if camera_override != null else camera
 	var focus := truck.global_position + Vector3(0, 1.8, 0)
 	var truck_basis := truck.global_basis.orthonormalized()
-	var offset := truck_basis.inverse() * (camera.global_position - focus)
+	var offset := truck_basis.inverse() * (view.global_position - focus)
 	var radius := offset.length()
 	var orbit_yaw := atan2(offset.x, offset.z)
 	var orbit_pitch := atan2(offset.y, Vector2(offset.x, offset.z).length())
-	var baseline := camera.global_basis
+	var baseline := view.global_basis
 	if radius > 0.001:
-		var up := Vector3.FORWARD if absf((focus - camera.global_position).normalized().dot(Vector3.UP)) > 0.999 else Vector3.UP
-		baseline = Transform3D(Basis.IDENTITY, camera.global_position).looking_at(focus, up).basis
-	var extra_rotation := (baseline.inverse() * camera.global_basis).get_euler()
+		var up := Vector3.FORWARD if absf((focus - view.global_position).normalized().dot(Vector3.UP)) > 0.999 else Vector3.UP
+		baseline = Transform3D(Basis.IDENTITY, view.global_position).looking_at(focus, up).basis
+	var extra_rotation := (baseline.inverse() * view.global_basis).get_euler()
 	var city := get_node_or_null("ProceduralCity")
+	var relative := truck_camera_frame().affine_inverse() * view.global_transform
 	return {
-		"version": 1, "scene": scene_file_path, "free_camera": free_camera_look,
-		"position": vector_values(camera.global_position),
-		"rotation_degrees": vector_values(camera.global_rotation * (180.0 / PI)),
-		"basis_x": vector_values(camera.global_basis.x), "basis_y": vector_values(camera.global_basis.y), "basis_z": vector_values(camera.global_basis.z),
-		"fov": camera.fov, "near": camera.near, "far": camera.far,
-		"horizontal_offset": camera.h_offset, "vertical_offset": camera.v_offset,
+		"version": 2, "scene": scene_file_path, "free_camera": free_camera_look,
+		"truck_relative_position": vector_values(relative.origin),
+		"truck_relative_basis_x": vector_values(relative.basis.x), "truck_relative_basis_y": vector_values(relative.basis.y), "truck_relative_basis_z": vector_values(relative.basis.z),
+		"camera_reference_lock": camera_reference_lock,
+		"position": vector_values(view.global_position),
+		"rotation_degrees": vector_values(view.global_rotation * (180.0 / PI)),
+		"basis_x": vector_values(view.global_basis.x), "basis_y": vector_values(view.global_basis.y), "basis_z": vector_values(view.global_basis.z),
+		"fov": view.fov, "near": view.near, "far": view.far,
+		"horizontal_offset": view.h_offset, "vertical_offset": view.v_offset,
 		"viewport_size": [get_viewport().get_visible_rect().size.x, get_viewport().get_visible_rect().size.y],
 		"truck_position": vector_values(truck.global_position), "truck_rotation_degrees": vector_values(truck.global_rotation * (180.0 / PI)),
 		"orbit_focus": vector_values(focus), "orbit_yaw_degrees": rad_to_deg(orbit_yaw), "orbit_pitch_degrees": rad_to_deg(orbit_pitch), "orbit_distance": radius,
@@ -400,13 +533,20 @@ func update_camera_pose_readout() -> void:
 	var extra: Array = state.extra_rotation_degrees
 	camera_pose_label.text = "CAMERA  World XYZ: %.3f, %.3f, %.3f\nRotation XYZ (deg): %.2f, %.2f, %.2f · FOV %.2f\nTruck orbit: yaw %.2f° · pitch %.2f° · distance %.3f\nExtra rotation XYZ (deg): %.2f, %.2f, %.2f\nMap seed: %s · %s · F9 saves image + camera JSON" % [p[0], p[1], p[2], r[0], r[1], r[2], state.fov, state.orbit_yaw_degrees, state.orbit_pitch_degrees, state.orbit_distance, extra[0], extra[1], extra[2], str(state.map_seed), "Night" if state.night else "Day"]
 
-func restore_camera_view(state: Dictionary) -> void:
+func restore_camera_view(state: Dictionary, relative_to_truck: bool = false) -> void:
 	set_free_camera_look(true)
 	var p: Array = state.position
 	var x: Array = state.basis_x
 	var y: Array = state.basis_y
 	var z: Array = state.basis_z
 	camera.global_transform = Transform3D(Basis(Vector3(x[0], x[1], x[2]), Vector3(y[0], y[1], y[2]), Vector3(z[0], z[1], z[2])), Vector3(p[0], p[1], p[2]))
+	if relative_to_truck and state.has("truck_relative_position"):
+		var relative_position: Array = state.truck_relative_position
+		var rx: Array = state.truck_relative_basis_x
+		var ry: Array = state.truck_relative_basis_y
+		var rz: Array = state.truck_relative_basis_z
+		camera.global_transform = truck_camera_frame() * Transform3D(Basis(Vector3(rx[0], rx[1], rx[2]), Vector3(ry[0], ry[1], ry[2]), Vector3(rz[0], rz[1], rz[2])), Vector3(relative_position[0], relative_position[1], relative_position[2]))
+	if camera_reference_lock: camera_reference_transform = truck_camera_frame().affine_inverse() * camera.global_transform
 	free_camera_pitch = camera.global_rotation.x
 	free_camera_heading = camera.global_rotation.y
 	free_camera_roll = camera.global_rotation.z
@@ -483,6 +623,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			camera_return_timer = camera_return_delay
 
 func _process(delta: float) -> void:
+	if not loading_ready: return
 	if loading_intro_active:
 		update_loading_intro(delta)
 		return
@@ -494,11 +635,16 @@ func _process(delta: float) -> void:
 		update_free_camera(delta)
 	else:
 		update_follow_camera(delta)
-	update_impact_shake(delta)
+	if not free_camera_look: update_impact_shake(delta)
 	damage_bar.value = 100.0*(1.0-truck.health/truck.max_health)
 	damage_label.text = "DAMAGE %d%%" % roundi(damage_bar.value)
+	progress_label.text = "LEVEL %d · XP %d · LICENSE POINTS %d" % [1 + floori(experience / 100.0), experience, license_points]
 	speed_label.text = "%d km/h" % roundi(absf(truck.speed)*3.6)
-	heading_label.text = "HDG  " + compass_heading(-truck.global_basis.z)
+	var street_name := ""
+	var street_nav := $HUD/Layout.get_node_or_null("StreetNavigation")
+	if street_nav != null and street_nav.get("current_label") != null and street_nav.current_label != null:
+		street_name = str(street_nav.current_label.text).trim_prefix("ON  ")
+	heading_label.text = "HDG  %s  %s" % [compass_heading(-truck.global_basis.z), street_name]
 	var loads = truck.corner_load
 	var total: float = loads[0]+loads[1]+loads[2]+loads[3]
 	load_label.text = "AXLE LOAD  Front %d%% / Rear %d%%\nSIDE LOAD  Left %d%% / Right %d%%" % [roundi((loads[0]+loads[1])/total*100),roundi((loads[2]+loads[3])/total*100),roundi((loads[0]+loads[2])/total*100),roundi((loads[1]+loads[3])/total*100)]
@@ -521,7 +667,7 @@ func _process(delta: float) -> void:
 	elif truck.deployed:
 		status_label.text = "KITCHEN OPEN  •  E / A to pack up, or RT to close and drive."
 	elif absf(truck.speed) < .5:
-		status_label.text = "PARKED  •  E / A opens the kitchen. RT drives forward; LT reverses."
+		status_label.text = "PARKED  •  E / A opens kitchen. Left stick up/down: D/R · RT accelerates · LT brakes · L3 honks."
 	else:
 		status_label.text = "Explore the plaza and park in a marked bay."
 	if not round_finished and service_waves != null:
@@ -533,9 +679,28 @@ func compass_heading(direction: Vector3) -> String:
 	return ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][index]
 
 func update_follow_camera(delta: float) -> void:
+	if DrivingControls.reverse_view_requested() and not truck.deployed:
+		var reverse_focus: Vector3 = truck.global_position + Vector3.UP * 1.8
+		camera.global_position = reverse_focus - truck.global_basis.z * 14.0 + Vector3.UP * 6.0
+		var query := PhysicsRayQueryParameters3D.create(reverse_focus, camera.global_position)
+		query.exclude = [truck.get_rid()]
+		var obstruction := get_world_3d().direct_space_state.intersect_ray(query)
+		if not obstruction.is_empty():
+			camera.global_position = obstruction.position + (reverse_focus - obstruction.position).normalized() * camera_obstruction_padding
+		camera.look_at(reverse_focus)
+		camera_clip_amount = 0.0
+		camera_clip_mask.material.set_shader_parameter("strength", 0.0)
+		camera_spring_velocity = Vector3.ZERO
+		camera_height_velocity = 0.0
+		camera_started = false
+		return
 	if kitchen_blend < .1:
 		var orbit_input := Input.get_axis("camera_right","camera_left")
 		var pitch_input := Input.get_axis("camera_up","camera_down")
+		if DrivingControls.gear == -1 and DrivingControls.reverse_forward_override:
+			orbit = camera_default_orbit
+			pitch = camera_default_pitch
+			pitch_input = 0.0
 		if absf(orbit_input) > 0.08 or absf(pitch_input) > 0.08:
 			camera_return_timer = camera_return_delay
 			orbit += orbit_input * joypad_camera_speed * delta
@@ -569,13 +734,14 @@ func update_follow_camera(delta: float) -> void:
 	speed_camera_blend = lerpf(speed_camera_blend,speed_ratio,1.0-exp(-speed_camera_response*delta))
 	camera.fov = camera_base_fov + speed_fov_increase*speed_camera_blend
 	var yaw = (free_camera_heading if free_camera_look else truck.rotation.y) + orbit
-	var follow_distance: float = maxf(4.0,distance-speed_camera_move_in*speed_camera_blend)
+	var follow_distance: float = maxf(4.0,distance-slow_speed_camera_tighten*(1.0-speed_camera_blend))
 	var offset = Vector3(sin(yaw)*cos(pitch), sin(pitch), cos(yaw)*cos(pitch)) * follow_distance
 	var target = focus + offset
 	var pad: Area3D = truck.parking_pad
 	var kitchen_active = not free_camera_look and is_instance_valid(pad) and truck.deployed and absf(truck.speed) < .5
 	var transition = pad.camera_transition_speed if is_instance_valid(pad) else 2.4
 	kitchen_blend = move_toward(kitchen_blend,1.0 if kitchen_active else 0.0,delta*transition)
+	camera.fov = lerpf(camera.fov, 60.0, kitchen_blend)
 	if is_instance_valid(pad):
 		target = target.lerp(truck.global_transform*pad.kitchen_camera_offset,kitchen_blend)
 		focus = focus.lerp(truck.global_transform*pad.kitchen_focus_offset,kitchen_blend)
@@ -607,6 +773,8 @@ func update_follow_camera(delta: float) -> void:
 		var outward := visible_direction.normalized()
 		camera_spring_velocity -= outward * maxf(0.0, camera_spring_velocity.dot(outward))
 	camera.look_at(focus)
+	camera.v_offset = camera_vertical_offset * (1.0 - kitchen_blend)
+	truck.get_node("KitchenCutaway").update_view(kitchen_blend, camera)
 	var frame_right := frame_transform.basis.x.normalized()
 	var frame_roll := asin(clampf(frame_right.y, -1.0, 1.0))
 	var roll_limit := deg_to_rad(camera_max_roll_degrees)

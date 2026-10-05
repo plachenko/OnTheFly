@@ -1,8 +1,10 @@
+@tool
 extends "res://crosswalk_signal.gd"
 var endpoint_a := Vector3.ZERO
 var endpoint_b := Vector3.ZERO
 
 func _ready() -> void:
+	if Engine.is_editor_hint(): return
 	for spec in [["SouthSignal", endpoint_a], ["NorthSignal", endpoint_b]]:
 		var post := Node3D.new()
 		post.name = spec[0]

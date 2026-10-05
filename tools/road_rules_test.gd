@@ -28,11 +28,12 @@ func run() -> void:
 	assert(rules.passing_allowed(Vector3.BACK, Vector3(60, 0, 0)))
 	assert(rules.approach_kind(Vector3.BACK, Vector3(-64, 0, -80), 4) == "straight")
 	assert(rules.approach_kind(Vector3.BACK, Vector3(-64, 0, -80), -4) == "straight_left")
-	var car: Node
+	var car: Node = null
 	for body in city.get_node("Traffic").get_children():
 		body.set_physics_process(false)
 		assert(rules.allows(body.travel_axis, body.lane_center))
 		if car == null: car = body
+	assert(car != null, "Expected at least one traffic car")
 	car.travel_axis = Vector3.BACK
 	car.lane_center = Vector3(60, 0, 0)
 	car.progress = -162.0

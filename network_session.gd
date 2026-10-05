@@ -5,7 +5,7 @@ signal lobby_changed
 signal chat_received(sender: String, message: String)
 signal world_message_received(player_id: int, message: String)
 const PORT := 24567
-const VERSION := 3
+const VERSION := 7
 const MAX_PLAYERS := 4
 const SCENE := "res://multiplayer_game.tscn"
 var active := false
@@ -23,6 +23,38 @@ const LEVELS := {"Plaza": "res://multiplayer_game.tscn", "Hilly City": "res://mu
 const COLORS := [Color("dd4435"), Color("278acf"), Color("35b779"), Color("ffd166"), Color("ae77da"), Color("eeeeee")]
 const MESSAGES := ["Hello!", "Ready to roll!", "One moment!", "Let's cook!", "Good luck!", "Nice truck!"]
 var selected_level := "Plaza"
+var city_size := 1
+var original_grid := false
+var host_port := PORT
+
+func choose_original_grid(value: bool) -> void:
+	if not active or not multiplayer.is_server() or started: return
+	original_grid = value
+	for id in roster:
+		if id != 1: roster[id].ready = false
+	receive_original_grid.rpc(value)
+	broadcast_roster()
+	lobby_changed.emit()
+
+@rpc("authority", "call_remote", "reliable")
+func receive_original_grid(value: bool) -> void:
+	original_grid = value
+	lobby_changed.emit()
+
+
+func choose_city_size(value: int) -> void:
+	if not active or not multiplayer.is_server() or started or value not in [0,1]: return
+	city_size = value
+	for id in roster:
+		if id != 1: roster[id].ready = false
+	receive_city_size.rpc(value)
+	broadcast_roster()
+	lobby_changed.emit()
+
+@rpc("authority", "call_remote", "reliable")
+func receive_city_size(value: int) -> void:
+	if value in [0,1]: city_size = value
+	lobby_changed.emit()
 var started := false
 var chat_history: Array = []
 var chat_times: Dictionary = {}
@@ -49,6 +81,7 @@ func start_host(port: int = PORT, nickname: String = "Host") -> Error:
 		status_changed.emit(last_error)
 		return error
 	begin(peer, nickname)
+	host_port = port
 	status_changed.emit("Hosting on UDP port %d…" % port)
 	register_player(1, player_name)
 	open_lobby.call_deferred()
@@ -206,6 +239,8 @@ func ready_for_world(version: int, nickname: String) -> void:
 	register_player(id, nickname)
 	loaded_players[id] = true
 	receive_level.rpc_id(id, selected_level)
+	receive_city_size.rpc_id(id, city_size)
+	receive_original_grid.rpc_id(id, original_grid)
 
 func register_player(id: int, nickname: String) -> void:
 	if roster.size() >= MAX_PLAYERS or roster.has(id): return

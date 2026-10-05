@@ -439,3 +439,79 @@ Road contacts do not cause crash damage; walls and vehicles still do.
 Single parking bays have solid white boxes. Adjacent ordinary bays use curbside
 row brackets. Service bays have colored diagonal hatching and dashed colored
 borders inside their white outline; service availability still controls color.
+
+Saved city loading
+------------------
+Shipped maps and newly saved maps use spatial scene sections. Terrain, roads,
+traffic controls, parking/service data and the truck's initial neighborhood load
+first. Remaining buildings, parks and street scenery are added one section per
+frame, prioritizing proximity to the truck. Background loading pauses with the
+game, and an incomplete streamed map cannot overwrite the city save.
+The menu chooses an approach inside the loaded neighborhood and keeps its saved
+camera framing. Multiplayer loads the complete map before starting.
+Generating a brand-new map still builds the whole city once; subsequent saved
+loads use sections. Legacy private saves load fully once and are then upgraded
+to sections for future loads; the existing save is replaced only after success.
+CityStore.progressive_loading can disable streaming for diagnostics. The city
+metadata streaming_city, stream_loaded_sections and stream_total_sections report
+background progress. tools/city_stream_test.gd verifies the four shipped variants.
+
+Camera references and animation
+------------------------------
+The menu holds the exact low rear-quarter screenshot reference without terrain
+collision, height clamping, automatic reframing or camera shake. MenuGroundFill
+colors rendered scenery below truck height minus 0.6 units a solid road color;
+menu_ground_fill_offset and menu_ground_fill_color are editable on the menu.
+The fill is menu-only and is removed when starting gameplay. Gameplay uses
+an elevated chase camera, smoothly tightening to 12.5 units at slow speed and
+easing out to 14.5 units with a wider FOV at full speed.
+Camera controls and telemetry appear only in camera mode, including paused
+playback. Camera mode hides menu and gameplay UI; exiting restores their prior
+visibility. C, F10 or right-stick click toggles camera mode. LB always captures
+without UI; F9 captures too unless debug replay is enabled.
+WASD flies, Q/E changes height, mouse
+or arrow keys looks, Shift moves faster, and F focuses the truck. With a controller,
+left stick flies, right stick looks, and LT/RT moves down/up.
+
+Each screenshot saves a matching .camera.json with the rendered camera's world
+transform, truck-relative transform, orbit yaw/pitch/range, FOV, viewport size,
+map seed and lighting. Lock angle and position to truck preserves this relative
+pose as the truck moves. Restore last screenshot angle reapplies the last pose
+relative to the current truck, with its lens settings, and enables the lock.
+
+In camera mode, Bake current view as startup menu saves the active camera's
+truck-relative position, rotation and lens to user://startup_menu.camera.json.
+The menu uses it on subsequent launches. Load baked startup camera restores
+that saved view around the current truck; Load camera JSON imports a screenshot
+sidecar for preview. Bake an imported view to make it the startup menu default.
+Saving affects the menu camera only; gameplay keeps its chase camera.
+
+Double-tap LB and hold the second press to record camera movement. Release it
+to stop recording, pause gameplay and open the camera timeline. Resume game
+restores the previous pause state. The first press still takes a clean screenshot.
+Record, Stop, Play and Resume are also available in the timeline panel.
+
+The camera timeline reuses the exaggeration lab's scrubber, key selection and
+key retiming. Drag the playhead to scrub; drag key diamonds to retime. Add key
+captures the current pose at the playhead; duration sets the timeline length.
+The graph shows orbit pitch and camera roll. Relative to truck preserves truck
+framing; disable it to replay the recorded world positions.
+
+Export JSON writes an onthefly.camera_timeline version 1 document. Import JSON
+recreates it. keys[].time contains seconds from the start; keys[].pose contains
+both camera transforms and lens settings. Samples record at up to 30 Hz with
+actual timestamps; playback interpolates positions and lens settings linearly
+and rotations with quaternion interpolation. The file includes reference map,
+truck and camera context. Send the exported JSON along with reference screenshots
+to recreate the framing and timing. A matching map/scene must be available for
+matching scenery; the timeline does not replay or rewind gameplay actors.
+
+Google Drive screenshot export (Windows)
+---------------------------------------
+In Camera Tools, choose a Google Drive synced folder, then use Save to Google
+Drive folder after taking a screenshot. The game remembers the folder and copies
+the latest PNG and its matching .camera.json without changing their contents.
+Google Drive for desktop must be installed, signed in and syncing that folder;
+the game reports the local copy, not confirmation of a completed cloud upload.
+Use Choose Google Drive folder to change the destination. An unavailable folder
+opens the folder picker again. Different existing files are never overwritten.

@@ -1,24 +1,44 @@
 extends CharacterBody3D
 
+@export_category("Sprite Animation (Experimental)")
+@export var use_driving_billboard := false
+@export_range(0.0,1.0,.05) var sprite_animation_strength := 1.0
+@export_range(.5,2.0,.05) var sprite_animation_time_scale := 1.0
+@export_range(.01,.4,.01) var sprite_lean_delay := .16
+@export_range(.08,.6,.01) var sprite_transition_seconds := .22
+@export_category("Chassis Exaggeration")
+@export_file("*.json") var exaggeration_profile_path := ""
+var exaggeration = preload("res://truck_exaggeration.gd").new()
+var billboard: Node3D
 var speed: float = 0.0
 var manual_controls_enabled: bool = true
 var network_controlled := false
 var network_controls: Dictionary = {}
 var network_edges: Dictionary = {}
+var test_controls_enabled := false
+var test_controls: Dictionary = {}
+@export_category("Handling Profile")
+@export var handling_id := "food_truck"
+@export var handling_profile: Resource
+@export var use_saved_handling_default := true
 
 func control_axis(negative: String, positive: String) -> float:
+    if test_controls_enabled: return float(test_controls.get(positive,0)) - float(test_controls.get(negative,0))
     if network_controlled:
         return float(network_controls.get(positive, 0.0)) - float(network_controls.get(negative, 0.0))
-    return Input.get_axis(negative, positive)
+    return DrivingControls.action_strength(positive) - DrivingControls.action_strength(negative)
 
 func control_strength(action: String) -> float:
-    return float(network_controls.get(action, 0.0)) if network_controlled else Input.get_action_strength(action)
+    if test_controls_enabled: return float(test_controls.get(action,0))
+    return float(network_controls.get(action, 0.0)) if network_controlled else DrivingControls.action_strength(action)
 
 func control_pressed(action: String) -> bool:
+    if test_controls_enabled: return control_strength(action)>0.5
     return control_strength(action) > 0.5 if network_controlled else Input.is_action_pressed(action)
 
 func control_just_pressed(action: String) -> bool:
-    return network_edges.get(action, false) if network_controlled else Input.is_action_just_pressed(action)
+    if test_controls_enabled: return false
+    return network_edges.get(action, false) if network_controlled else DrivingControls.direction_signal_just_pressed(action)
 var deployed: bool = false
 var opening: float = 0.0
 var steer: float = 0.0
@@ -45,6 +65,14 @@ var lateral_accel: float = 0.0
 @export var center_of_mass_height: float = 1.45
 @export var spring_stiffness: float = 42000.0
 @export var spring_damping: float = 4600.0
+@export_range(.4,1.0,.05) var rear_suspension_firmness := .78
+@export_range(0.0,.08,.005) var body_yaw_lag := .028
+@export_range(0.0,2.0,.05) var donut_drift_speed := .65
+var body_yaw_sway := 0.0
+var body_yaw_velocity := 0.0
+var engine_phase := 0.0
+var measured_yaw_rate := 0.0
+var donut_drift_velocity := Vector3.ZERO
 @export var suspension_travel: float = 0.30
 @export_range(0.0, 0.5, 0.01) var maximum_slope_tilt: float = 0.32
 @export var slope_tilt_response: float = 7.0
@@ -54,10 +82,22 @@ var lateral_accel: float = 0.0
 @export var acceleration: float = 12.0
 @export var braking_force: float = 22.0
 @export var rolling_drag: float = 2.3
+@export var steering_low_speed := .48
+@export var steering_high_speed := .23
+@export var steering_response := 2.5
+@export var traction_response := 18.0
+@export var drift_traction_response := 3.5
+@export var drift_turn_multiplier := 1.65
 @export var cone_push_strength: float = 2.0
 @export_category("Parking Power Slide")
 @export var power_slide_min_speed: float = 3.5
 @export var power_slide_duration: float = 1.2
+@export var power_slide_steering := .58
+@export var power_slide_turn_multiplier := 4.5
+@export var power_slide_traction_response := .65
+@export var power_slide_brake_grip := .32
+@export var power_slide_enter_response := 5.0
+@export var power_slide_recovery_response := 2.5
 var power_slide_active: bool = false
 var power_slide_blend: float = 0.0
 var power_slide_elapsed: float = 0.0
@@ -125,6 +165,8 @@ var boost_fuel: float = 0.0
 var boost_active: bool = false
 var drift_blend: float = 0.0
 var stationary_drifting: bool = false
+var tire_throttle := 0.0
+var tire_brake := 0.0
 var front_axle_pivot: Vector3 = Vector3.ZERO
 var travel_heading: float = 0.0
 var headlights_on: bool = true
@@ -133,10 +175,25 @@ var hazards_on: bool = false
 var signal_start_heading: float = 0.0
 var signal_turn_completed: bool = false
 var damage_effects: Node3D
+var police_parking: Node
+var highway_transit: Node
+var horn_player: AudioStreamPlayer3D
+var horn_count := 0
+
+func honk() -> void:
+    if horn_player == null: return
+    horn_count += 1
+    horn_player.play()
 
 func _ready() -> void:
+    HandlingProfiles.apply_startup(self)
+    reload_exaggeration_profile()
     model = $Model
     model_rest_rotation = model.quaternion
+    call_deferred("create_driving_billboard")
+    var kitchen_cutaway = preload("res://kitchen_cutaway.gd").new()
+    kitchen_cutaway.name = "KitchenCutaway"
+    add_child(kitchen_cutaway)
     spawn_transform = global_transform
     health = max_health
     travel_heading = rotation.y
@@ -156,10 +213,29 @@ func _ready() -> void:
     damage_effects = preload("res://truck_damage_effects.gd").new()
     damage_effects.name = "DamageEffects"
     add_child(damage_effects)
+    horn_player = AudioStreamPlayer3D.new()
+    horn_player.name = "TruckHorn"
+    horn_player.stream = preload("res://assets/audio/horns/van_short.wav")
+    horn_player.max_distance = 65.0
+    add_child(horn_player)
+    if get_parent().has_node("ProceduralCity"):
+        highway_transit = preload("res://highway_transit.gd").new()
+        highway_transit.name = "HighwayTransit"
+        add_child(highway_transit)
+        var tire_effects = preload("res://tire_effects.gd").new()
+        tire_effects.name = "TireEffects"
+        add_child(tire_effects)
+        police_parking = preload("res://police_parking.gd").new()
+        police_parking.name = "PoliceParking"
+        add_child(police_parking)
 
 func _physics_process(delta: float) -> void:
+    if highway_transit != null and highway_transit.drive(delta): return
     var previous_speed = speed
+    var previous_yaw := rotation.y
     update_light_controls()
+    if control_just_pressed("truck_horn"): honk()
+    if police_parking != null and police_parking.drive(delta): return
     impact_cooldown = maxf(0.0, impact_cooldown-delta)
     climb_cooldown = maxf(0.0,climb_cooldown-delta)
     hill_jump_cooldown = maxf(0.0,hill_jump_cooldown-delta)
@@ -219,10 +295,12 @@ func _physics_process(delta: float) -> void:
     var speed_bonus = boost_speed_multiplier if boost_active else 1.0
     var accel_bonus = boost_acceleration_multiplier if boost_active else 1.0
     update_power_slide(brake_amount, steering_input, throttle, can_drive and manual_controls_enabled and is_on_floor(), delta)
-    var drifting = drift_owned and not power_slide_active and braking and absf(steering_input)>.12 and (absf(speed)>2.0 or absf(throttle)>0.0) and can_drive
+    tire_throttle = throttle
+    tire_brake = brake_amount
+    var drifting = (drift_owned or absf(throttle)>.15) and not power_slide_active and brake_amount>.25 and absf(steering_input)>.12 and (absf(speed)>2.0 or absf(throttle)>0.0) and can_drive and is_on_floor()
     var powered_drift = drifting and absf(throttle)>0.0
     var was_stationary_drifting = stationary_drifting
-    stationary_drifting = powered_drift and (stationary_drifting or absf(speed)<.5)
+    stationary_drifting = powered_drift and brake_amount>.5 and absf(steering_input)>.25 and (stationary_drifting or absf(speed)<3.0)
     if was_stationary_drifting and not stationary_drifting:
         travel_heading=rotation.y
     drift_blend = move_toward(drift_blend,1.0 if drifting else 0.0,delta*3.0)
@@ -239,11 +317,11 @@ func _physics_process(delta: float) -> void:
     if stationary_drifting:
         speed=0.0
     elif braking:
-        var brake_grip = .32 if power_slide_active else (.18*damage_performance() if powered_drift else (.36 if drifting else 1.0))
+        var brake_grip = power_slide_brake_grip if power_slide_active else (.18*damage_performance() if powered_drift else (.36 if drifting else 1.0))
         speed = move_toward(speed, 0.0, braking_force * brake_amount * delta * brake_grip)
         if powered_drift:
-            var drift_target = forward_speed if throttle>0.0 else -reverse_speed
-            speed = move_toward(speed,drift_target*damage_performance(),acceleration*damage_performance()*absf(throttle)*delta*.75)
+            var braking_drift_target = forward_speed if throttle>0.0 else -reverse_speed
+            speed = move_toward(speed,braking_drift_target*damage_performance(),acceleration*damage_performance()*absf(throttle)*delta*.75)
     elif throttle != 0.0:
         var accel = acceleration if throttle * speed >= 0.0 else 13.0
         var performance = damage_performance()
@@ -256,8 +334,8 @@ func _physics_process(delta: float) -> void:
     var decelerating := previous_speed > 1.0 and (previous_speed-speed)/maxf(delta,0.001) > 4.0
     $VehicleLights.headlights_enabled = headlights_on
     $VehicleLights.set_driving_lights(braking or decelerating or deployed, speed < -0.25, turn_signal < 0, turn_signal > 0, hazards_on)
-    var steering_limit = lerpf(.48, .23, clampf(absf(speed) / 15.0, 0.0, 1.0))
-    steer = move_toward(steer, steering_input * lerpf(steering_limit, 0.58, power_slide_blend), delta * 2.5)
+    var steering_limit = lerpf(steering_low_speed, steering_high_speed, clampf(absf(speed) / 15.0, 0.0, 1.0))
+    steer = move_toward(steer, steering_input * lerpf(steering_limit, power_slide_steering, power_slide_blend), delta * steering_response)
     # Throttle can break rear traction and rotate the truck from a standstill.
     var turn_direction = signf(speed) if absf(speed)>.5 else signf(throttle)
     var turn_speed = turn_direction*maxf(absf(speed),4.0*absf(throttle)) if powered_drift else speed
@@ -265,12 +343,22 @@ func _physics_process(delta: float) -> void:
         pivot_about_front_axle(steering_input*signf(throttle)*stationary_drift_turn_speed*delta)
         travel_heading=rotation.y
     else:
-        rotation.y += steer * turn_speed / 5.0 * delta * (1.0+drift_blend*.65) * lerpf(1.0, 4.5, power_slide_blend)
-    var traction_response := lerpf(lerpf(18.0,3.5,drift_blend), 0.65, power_slide_blend)
-    travel_heading = lerp_angle(travel_heading,rotation.y,1.0-exp(-traction_response*delta))
+        rotation.y += steer * turn_speed / 5.0 * delta * lerpf(1.0,drift_turn_multiplier,drift_blend) * lerpf(1.0, power_slide_turn_multiplier, power_slide_blend)
+    var grip := lerpf(lerpf(traction_response,drift_traction_response,drift_blend), power_slide_traction_response, power_slide_blend)
+    travel_heading = lerp_angle(travel_heading,rotation.y,1.0-exp(-grip*delta))
     var forward = Vector3(-sin(travel_heading),0,-cos(travel_heading))
     velocity.x = forward.x * speed
     velocity.z = forward.z * speed
+    var yaw_rate := angle_difference(previous_yaw, rotation.y) / maxf(delta, .001)
+    var drift_target := Vector3.ZERO
+    if stationary_drifting:
+        var weight_scale := clampf(vehicle_mass / 2400.0 * center_of_mass_height / 1.45, .4, 2.0)
+        var rear_weight := (corner_load[2] + corner_load[3]) / maxf(1.0, vehicle_mass * 9.81)
+        # Tire scrub lets the front-axle pivot migrate; translation still uses the collision solver.
+        drift_target = (global_basis.x * signf(yaw_rate) + global_basis.z * .3) * donut_drift_speed * weight_scale * clampf(absf(yaw_rate) / 2.5,0,1.5) * (0.7 + rear_weight)
+    donut_drift_velocity = donut_drift_velocity.lerp(drift_target, 1.0 - exp(-delta * (2.0 if stationary_drifting else 5.0)))
+    velocity.x += donut_drift_velocity.x
+    velocity.z += donut_drift_velocity.z
     if car_launch_active:
         velocity.x = car_launch_horizontal.x
         velocity.z = car_launch_horizontal.z
@@ -292,6 +380,7 @@ func _physics_process(delta: float) -> void:
             var car_contact: bool = car_body.receive_vehicle_contact(forward * speed, -car_sweep.get_normal(), car_sweep.get_position()) if car_body.has_method("receive_vehicle_contact") else car_body.disable_from_impact(car_approach,forward*signf(speed),car_sweep.get_position())
             if car_contact:
                 PoliceDispatch.report_collision(car_body)
+                record_license_collision(car_body, car_approach)
                 take_damage(car_approach*0.6)
                 speed *= 0.35
                 velocity.x = forward.x*speed
@@ -328,6 +417,8 @@ func _physics_process(delta: float) -> void:
     for i in get_slide_collision_count():
         var hit = get_slide_collision(i)
         var body = hit.get_collider()
+        if body.has_method("collect_by_truck") and body.collect_by_truck(self):
+            continue
         # A curb is ground support, even if the solver reports its vertical
         # edge for a frame. Never turn that contact into crash damage/braking.
         if body.get_meta("sidewalk", false) or body.get_meta("drivable_surface", false):
@@ -339,9 +430,14 @@ func _physics_process(delta: float) -> void:
             var car_contact: bool = body.receive_vehicle_contact(forward * speed, -hit.get_normal(), hit.get_position()) if body.has_method("receive_vehicle_contact") else body.disable_from_impact(car_impact,forward*signf(speed),hit.get_position())
             if car_contact:
                 PoliceDispatch.report_collision(body)
+                record_license_collision(body, car_impact)
                 take_damage(car_impact * 0.6)
                 speed *= .55
                 continue
+        if body.has_method("receive_lot_contact"):
+            var lot_impact = absf((forward*speed).dot(hit.get_normal()))
+            body.receive_lot_contact(lot_impact)
+            record_license_collision(body, lot_impact)
         var breakable = body.get_node_or_null("BoostBreakable")
         if breakable and (breakable.broken or try_boost_break(body,hit.get_normal(),forward)):
             continue
@@ -387,9 +483,12 @@ func _physics_process(delta: float) -> void:
         if get_parent().has_method("trigger_impact_shake"):
             get_parent().trigger_impact_shake(strongest_impact)
         impact_cooldown = 0.15
-    rolling += speed * delta / 0.59
+    rolling += (signf(throttle) * 10.0 if stationary_drifting else speed) * delta / 0.59
     longitudinal_accel = clampf((speed-previous_speed)/delta, -18.0, 18.0)
-    lateral_accel = clampf(steer * speed * speed / 5.0, -10.0, 10.0)
+    measured_yaw_rate = angle_difference(previous_yaw, rotation.y) / maxf(delta, .001)
+    # Rear mass travels around the front pivot even when longitudinal speed is zero.
+    var rotational_load := signf(measured_yaw_rate) * measured_yaw_rate * measured_yaw_rate * 1.5 if stationary_drifting else 0.0
+    lateral_accel = clampf(measured_yaw_rate * speed + rotational_load, -10.0, 10.0)
     update_suspension(delta)
     update_slope_tilt(delta)
     $VehicleLights.sync_with_chassis()
@@ -398,7 +497,13 @@ func _physics_process(delta: float) -> void:
     skeleton.set_bone_pose_rotation(awning, Quaternion(Vector3.RIGHT, PI / 2.0 * eased))
     skeleton.set_bone_pose_rotation(counter, Quaternion(Vector3.RIGHT, -PI / 2.0 * eased))
 
+func record_license_collision(car: Object, strength: float) -> void:
+    var level := get_parent()
+    if level.has_method("register_car_collision"):
+        level.register_car_collision(self, car, strength)
+
 func take_damage(amount: float) -> void:
+    if highway_transit != null and highway_transit.active: return
     var previous_health := health
     health = maxf(0.0,health-maxf(0.0,amount)*(1.0-armor_reduction if armor_owned else 1.0))
     if health < previous_health and is_instance_valid(damage_effects):
@@ -431,6 +536,8 @@ func pivot_about_front_axle(angle: float) -> void:
 func try_boost_break(body: Node, normal: Vector3, direction: Vector3) -> bool:
     if not boost_active or not body is PhysicsBody3D:
         return false
+    if body.has_method("collect_by_truck"):
+        return body.collect_by_truck(self)
     if body.has_method("boost_bounce") and body.boost_bounce(-global_basis.z,absf(speed)):
         message = "Boost rebound!"
         message_timer = 1.0
@@ -450,6 +557,10 @@ func damage_performance() -> float:
     return lerpf(damaged_speed_floor,1.0,clampf(health/max_health,0.0,1.0))
 
 func update_light_controls() -> void:
+    if control_just_pressed("direction_signal_left"):
+        activate_direction_signal(-1)
+    if control_just_pressed("direction_signal_right"):
+        activate_direction_signal(1)
     if control_just_pressed("truck_headlights"):
         headlights_on = not headlights_on
     if control_just_pressed("truck_hazard"):
@@ -464,6 +575,12 @@ func update_light_controls() -> void:
         turn_signal = 0 if turn_signal == 1 else 1
         signal_start_heading = rotation.y
         signal_turn_completed = false
+
+func activate_direction_signal(direction: int) -> void:
+    hazards_on = false
+    turn_signal = direction
+    signal_start_heading = rotation.y
+    signal_turn_completed = false
 
 func handle_hazard_press(now_ms: int) -> void:
     if now_ms - last_hazard_press_ms <= roundi(fsd_double_tap_seconds * 1000.0):
@@ -626,10 +743,18 @@ func find_skeleton(node: Node) -> Skeleton3D:
 
 func ground_height_at(local_point: Vector3) -> float:
     var world_point: Vector3 = global_transform * local_point
+    if highway_transit != null and highway_transit.active:
+        return highway_transit.surface_height(world_point)
     var query := PhysicsRayQueryParameters3D.create(world_point + Vector3.UP * 8.0, world_point + Vector3.DOWN * 12.0)
     query.exclude = [get_rid()]
     var contact := get_world_3d().direct_space_state.intersect_ray(query)
-    return contact.position.y if not contact.is_empty() else world_point.y
+    return visual_contact_height(contact.position,contact.collider) if not contact.is_empty() else world_point.y
+
+func visual_contact_height(point: Vector3, body: Node) -> float:
+    var city = get_parent().get_node_or_null("ProceduralCity")
+    if city != null and city.visual_surfaces_ready and (body.get_meta("drivable_surface",false) or body.get_meta("sidewalk",false)):
+        return point.y + city.road_visual_height_at(point.x,point.z) - city.terrain_surface_height_at(point.x,point.z)
+    return point.y
 
 func update_slope_tilt(delta: float) -> void:
     # Tilt only the visual model; keeping the CharacterBody upright preserves steering and collision.
@@ -656,7 +781,7 @@ func update_suspension(delta: float) -> void:
     for i in 4:
         var axle_sign = -1.0 if i < 2 else 1.0
         var side_sign = -1.0 if i % 2 == 0 else 1.0
-        corner_load[i] = maxf(300.0, baseline + fore_aft * axle_sign + side_transfer * side_sign)
+        corner_load[i] = maxf(300.0, baseline + fore_aft * axle_sign + side_transfer * side_sign * (0.8 if i < 2 else 1.2))
     # Keep total supported weight constant even when an inside tire unloads.
     var total_load = corner_load[0]+corner_load[1]+corner_load[2]+corner_load[3]
     for i in 4:
@@ -665,7 +790,8 @@ func update_suspension(delta: float) -> void:
         # Semi-implicit spring integration in short substeps keeps damping stable.
         var step = delta / 4.0
         for substep in 4:
-            var force = spring_stiffness * (suspension_target[i]-spring_height[i]) - spring_damping*spring_velocity[i]
+            var firmness := 1.0 if i < 2 else rear_suspension_firmness
+            var force = spring_stiffness * firmness * (suspension_target[i]-spring_height[i]) - spring_damping * sqrt(firmness) * (.8 if i >= 2 else 1.0) * spring_velocity[i]
             spring_velocity[i] += force/(vehicle_mass/4.0)*step
             spring_height[i] = clampf(spring_height[i]+spring_velocity[i]*step, -suspension_travel, suspension_travel)
         var rest = skeleton.get_bone_global_rest(suspension_bones[i])
@@ -675,7 +801,9 @@ func update_suspension(delta: float) -> void:
         var contact = get_world_3d().direct_space_state.intersect_ray(query)
         var height = 0.0
         if not contact.is_empty():
-            height = contact.position.y + .59 - wheel_world.y
+            height = visual_contact_height(contact.position,contact.collider) + .59 - wheel_world.y
+        if highway_transit != null and highway_transit.active:
+            height = highway_transit.surface_height(wheel_world) + .59 - wheel_world.y
         var terrain_reach = maxf(1.6,effective_climb_height()+.15)
         road_height[i] = move_toward(road_height[i], clampf(height,-terrain_reach,terrain_reach),delta*8.0)
     var front = (spring_height[0]+spring_height[1]+road_height[0]+road_height[1])/2.0
@@ -685,8 +813,17 @@ func update_suspension(delta: float) -> void:
     var body_roll = clampf((left-right)/2.4,-.14,.14)
     var body_pitch = clampf((front-rear)/5.0,-.10,.10)
     var body_rest = skeleton.get_bone_rest(chassis)
-    skeleton.set_bone_pose_position(chassis,body_rest.origin+Vector3(0,0,(front+rear)/2.0+(lift_body_raise if lift_owned else 0.0)))
-    skeleton.set_bone_pose_rotation(chassis,Quaternion(Vector3.RIGHT,body_roll)*Quaternion(Vector3.UP,body_pitch))
+    engine_phase = fmod(engine_phase + delta * TAU * 13.0, TAU)
+    var idle_vibration := sin(engine_phase) * .003 if health > 0.0 and not round_over else 0.0
+    skeleton.set_bone_pose_position(chassis,body_rest.origin+Vector3(0,0,(front+rear)/2.0+(lift_body_raise if lift_owned else 0.0)+idle_vibration))
+    var sway_target := clampf(-measured_yaw_rate * body_yaw_lag * center_of_mass_height / 1.45, -.085, .085)
+    for substep in 4:
+        var sway_step := minf(delta,.1) / 4.0
+        body_yaw_velocity += ((sway_target - body_yaw_sway) * 24.0 - body_yaw_velocity * 5.5) * sway_step
+        body_yaw_sway = clampf(body_yaw_sway + body_yaw_velocity * sway_step, -.10, .10)
+    # Imported chassis Z is vertical: a small inertial yaw lets the rear lag behind turns.
+    skeleton.set_bone_pose_rotation(chassis,Quaternion(Vector3.BACK,body_yaw_sway)*Quaternion(Vector3.RIGHT,body_roll)*Quaternion(Vector3.UP,body_pitch))
+    exaggeration.apply(self,delta)
     skeleton.force_update_all_bone_transforms()
     # Wheels stay on the road; their suspension bones extend/compress relative
     # to the pitching/rolling chassis instead of dragging tires through the ground.
@@ -723,10 +860,12 @@ func try_car_landing_launch(body: Node, normal: Vector3, point: Vector3, approac
     car_launch_horizontal = car_landing_direction() * clampf(car_landing_lateral_speed, 0, 30)
     velocity = car_launch_horizontal + Vector3.UP * clampf(car_landing_upward_speed, 1, 25)
     PoliceDispatch.report_collision(body)
+    record_license_collision(body, maxf(0.0, -(approach_velocity - body.motion_vector).y))
     take_damage(maxf(0.0, -(approach_velocity - body.motion_vector).y) * 0.6)
     return true
 
 func reset_truck() -> void:
+    exaggeration.reset_motion()
     global_transform = spawn_transform
     model.quaternion = model_rest_rotation
     velocity = Vector3.ZERO
@@ -751,6 +890,11 @@ func reset_truck() -> void:
     power_slide_used = false
     power_slide_elapsed = 0.0
     stationary_drifting = false
+    donut_drift_velocity = Vector3.ZERO
+    measured_yaw_rate = 0.0
+    engine_phase = 0.0
+    body_yaw_sway = 0.0
+    body_yaw_velocity = 0.0
     boost_active = false
     headlights_on = true
     turn_signal = 0
@@ -782,5 +926,19 @@ func update_power_slide(brake: float, steering: float, throttle: float, allowed:
         power_slide_elapsed += delta
         if not allowed or brake < 0.2 or absf(speed) < 0.7 or power_slide_elapsed >= power_slide_duration:
             power_slide_active = false
-    power_slide_blend = move_toward(power_slide_blend, 1.0 if power_slide_active else 0.0, delta * (5.0 if power_slide_active else 2.5))
+    power_slide_blend = move_toward(power_slide_blend, 1.0 if power_slide_active else 0.0, delta * (power_slide_enter_response if power_slide_active else power_slide_recovery_response))
 
+
+func create_driving_billboard() -> void:
+    if not use_driving_billboard: return
+    billboard = preload("res://truck_billboard.gd").new()
+    billboard.name = "TruckBillboard"
+    add_child(billboard)
+
+func reload_exaggeration_profile() -> Error:
+    var path: String = exaggeration_profile_path if not exaggeration_profile_path.is_empty() else preload("res://truck_exaggeration.gd").default_path(handling_id)
+    var error := exaggeration.load_profile(path)
+    if error != OK and exaggeration.profile.is_empty():
+        exaggeration.profile = preload("res://truck_idle_motion.gd").idle_profile()
+        exaggeration.reset_motion()
+    return error

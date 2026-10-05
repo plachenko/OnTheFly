@@ -1,0 +1,27 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://police_test.gd" id="1"]
+[ext_resource type="Script" path="res://police_test_city.gd" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/truck.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://scenes/traffic_car.tscn" id="4"]
+
+[node name="PoliceTest" type="Node3D"]
+script = ExtResource("1")
+
+[node name="ProceduralCity" type="Node3D" parent="."]
+script = ExtResource("2")
+
+[node name="Traffic" type="Node3D" parent="ProceduralCity"]
+
+[node name="Police" parent="ProceduralCity/Traffic" instance=ExtResource("4")]
+driving_speed = 0.0
+obey_crosswalks = false
+intersection_turn_chance = 0.0
+horns_enabled = false
+
+[node name="ParkingSpaces" type="Node3D" parent="ProceduralCity"]
+
+[node name="Crosswalks" type="Node3D" parent="ProceduralCity"]
+
+[node name="FoodTruck" parent="." instance=ExtResource("3")]
+position = Vector3(0, 0.15, 8)

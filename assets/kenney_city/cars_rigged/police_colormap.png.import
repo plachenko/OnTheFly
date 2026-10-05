@@ -4,8 +4,9 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://d35cts1fsjwjv"
 path.s3tc="res://.godot/imported/police_colormap.png-cc56c4ec5e01169f2525be42b7a234a5.s3tc.ctex"
+path.etc2="res://.godot/imported/police_colormap.png-cc56c4ec5e01169f2525be42b7a234a5.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 generator_parameters={
@@ -15,7 +16,7 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/kenney_city/cars_rigged/police_colormap.png"
-dest_files=["res://.godot/imported/police_colormap.png-cc56c4ec5e01169f2525be42b7a234a5.s3tc.ctex"]
+dest_files=["res://.godot/imported/police_colormap.png-cc56c4ec5e01169f2525be42b7a234a5.s3tc.ctex", "res://.godot/imported/police_colormap.png-cc56c4ec5e01169f2525be42b7a234a5.etc2.ctex"]
 
 [params]
 

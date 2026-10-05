@@ -11,7 +11,7 @@ func _initialize() -> void:
 	var invert := CheckBox.new()
 	listener.begin(buttons, false)
 	var motion := InputEventJoypadMotion.new()
-	motion.axis = 3
+	motion.axis = JOY_AXIS_RIGHT_Y
 	motion.axis_value = -1.0
 	assert(not listener.capture_event(motion))
 	var button := InputEventJoypadButton.new()

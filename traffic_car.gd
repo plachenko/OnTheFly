@@ -18,6 +18,10 @@ var current_driving_speed: float = 0.0
 var driving_acceleration: float = 0.0
 var suspension_acceleration: float = 0.0
 @export var loop_extent: float = 55.0
+@export var prefer_left_turn: bool = true
+var route_end_cached := false
+var route_end_center := Vector3.ZERO
+var route_has_exit := true
 @export var obey_crosswalks: bool = true
 @export_range(0.0, 1.0, 0.05) var intersection_turn_chance: float = 0.28
 @export var parked: bool = false
@@ -93,8 +97,8 @@ var turn_control_a: Vector3
 var turn_control_b: Vector3
 var turn_exit_axis: Vector3
 @export_category("Traffic Performance")
-@export var near_simulation_radius := 90.0
-@export var sleep_simulation_radius := 115.0
+@export var near_simulation_radius := 64.0
+@export var sleep_simulation_radius := 80.0
 @export var distant_tick_seconds := 0.2
 var distant_mode := false
 var proximity_timer := 0.0
@@ -110,6 +114,23 @@ var hybrid_pending_motion := Vector3.ZERO
 var hybrid_hit_cooldown := 0.0
 var active_collision_layer := 1
 var active_collision_mask := 1
+var ambient_active := true
+
+func set_ambient_active(enabled: bool) -> void:
+	if ambient_active == enabled: return
+	ambient_active = enabled
+	set_physics_process(enabled)
+	collision_layer = active_collision_layer if enabled else 0
+	collision_mask = active_collision_mask if enabled else 0
+	$Visual.visible = enabled
+	$VehicleLights.visible = enabled
+	var visual_lod := get_node_or_null("TrafficVisualLOD")
+	if visual_lod != null: visual_lod.refresh()
+	var circle := get_node_or_null("PoliceCircle")
+	if circle != null:
+		circle.visible = enabled
+		circle.set_process(enabled)
+		if not enabled: circle.yellow_remaining = 0.0
 
 func _ready() -> void:
 	city = get_parent().get_parent() as Node3D
@@ -181,6 +202,14 @@ func _ready() -> void:
 		add_child(hybrid)
 		collision_center = $CarCollision.position
 		hybrid.exploded.connect(explode)
+	if not has_node("TrafficVisualLOD"):
+		var visual_lod := preload("res://traffic_visual_lod.gd").new()
+		visual_lod.name = "TrafficVisualLOD"
+		add_child(visual_lod)
+	PerformanceDiagnostics.traffic_enabled_changed.connect(apply_debug_traffic)
+	PerformanceDiagnostics.traffic_logic_changed.connect(apply_debug_traffic_logic)
+	apply_debug_traffic.call_deferred()
+	apply_debug_traffic_logic.call_deferred()
 
 func supports_hybrid_model() -> bool:
 	if not spring_skeleton or $Visual.get_child_count() == 0:
@@ -194,7 +223,64 @@ func supports_hybrid_model() -> bool:
 			wheels += 1
 	return wheels == 4
 
+var debug_traffic_state: Dictionary = {}
+var debug_logic_state: Array[Dictionary] = []
+
+func apply_debug_traffic_logic() -> void:
+	# Restore the full-disable state first so the two switches compose in either order.
+	var fully_disabled := not debug_traffic_state.is_empty()
+	if fully_disabled: restore_debug_traffic()
+	if not PerformanceDiagnostics.traffic_logic_enabled:
+		if debug_logic_state.is_empty():
+			var nodes: Array[Node] = [self]
+			nodes.append_array(find_children("*", "Node", true, false))
+			for node in nodes:
+				var state := {"node": node, "physics_processing": node.is_physics_processing()}
+				if node is RigidBody3D:
+					state["freeze"] = node.freeze
+					node.freeze = true
+				node.set_physics_process(false)
+				debug_logic_state.append(state)
+			distant_elapsed = 0.0
+	else:
+		for state in debug_logic_state:
+			if not is_instance_valid(state.node): continue
+			state.node.set_physics_process(state.physics_processing)
+			if state.has("freeze"): state.node.freeze = state.freeze
+		debug_logic_state.clear()
+	if fully_disabled: apply_debug_traffic()
+
+func apply_debug_traffic() -> void:
+	if not PerformanceDiagnostics.traffic_enabled:
+		if not debug_traffic_state.is_empty(): return
+		debug_traffic_state = {"visible": visible, "process_mode": process_mode, "bodies": []}
+		var bodies: Array[Node] = [self]
+		bodies.append_array(find_children("*", "CollisionObject3D", true, false))
+		for body in bodies:
+			var state := {"node": body, "layer": body.collision_layer, "mask": body.collision_mask}
+			if body is RigidBody3D:
+				state["freeze"] = body.freeze
+				body.freeze = true
+			body.collision_layer = 0
+			body.collision_mask = 0
+			debug_traffic_state.bodies.append(state)
+		hide()
+		process_mode = Node.PROCESS_MODE_DISABLED
+	elif not debug_traffic_state.is_empty():
+		restore_debug_traffic()
+
+func restore_debug_traffic() -> void:
+	visible = debug_traffic_state.visible
+	process_mode = debug_traffic_state.process_mode
+	for state in debug_traffic_state.bodies:
+		if not is_instance_valid(state.node): continue
+		state.node.collision_layer = state.layer
+		state.node.collision_mask = state.mask
+		if state.has("freeze"): state.node.freeze = state.freeze
+	debug_traffic_state.clear()
+
 func _physics_process(delta: float) -> void:
+	if not Engine.is_editor_hint() and not PerformanceDiagnostics.traffic_logic_enabled: return
 	if not Engine.is_editor_hint() and not multiplayer.is_server():
 		return
 	if Engine.is_editor_hint():
@@ -232,6 +318,7 @@ func step_hybrid(delta: float) -> void:
 	hybrid._physics_process(delta)
 	if hybrid.state in [hybrid.State.DRIVING, hybrid.State.REACTION]:
 		$CarCollision.transform = $Visual.transform * Transform3D(Basis.IDENTITY, collision_center)
+		keep_landscape_clearance()
 	if hybrid.state in [hybrid.State.FLIGHT, hybrid.State.DISABLED, hybrid.State.EXPLODED]:
 		if not disabled:
 			disabled = true
@@ -311,6 +398,8 @@ func queue_hybrid_impact(relative: Vector3, normal: Vector3) -> bool:
 			hybrid_pending_relative = relative
 			hybrid_pending_motion = motion_vector
 			hybrid_pending_normal = normal
+	var visual_lod := get_node_or_null("TrafficVisualLOD")
+	if visual_lod != null: visual_lod.refresh()
 	return true
 
 func hybrid_chain_contact(hit: Dictionary, impact_velocity: Vector3) -> void:
@@ -400,50 +489,24 @@ func apply_hybrid_snapshot(data: Dictionary) -> void:
 	$VehicleLights.sync_with_chassis()
 
 func update_proximity_mode() -> void:
-	var nearest := INF
-	var level := city.get_parent() if is_instance_valid(city) else null
-	var players: Variant = level.get("trucks") if level != null else null
-	if players is Dictionary:
-		for body in players.values():
-			var gap: float = global_position.distance_squared_to(body.global_position)
-			if gap < nearest:
-				nearest = gap
-				truck = body
-	elif is_instance_valid(truck): nearest = global_position.distance_squared_to(truck.global_position)
-	var circle := get_node_or_null("PoliceCircle")
-	var must_stay_active: bool = disabled or hybrid_pending_strength > 0 or (hybrid != null and hybrid.state != hybrid.State.DRIVING) or (circle != null and circle.pursuing)
-	var radius := near_simulation_radius if distant_mode else maxf(near_simulation_radius + 5.0, sleep_simulation_radius)
-	var should_sleep := PerformanceDiagnostics.traffic_lod_enabled and not must_stay_active and nearest > radius * radius
-	if should_sleep == distant_mode: return
-	distant_mode = should_sleep
-	# Normal traffic is already kinematic; dynamic wreck physics is kept intact.
-	collision_layer = 0 if distant_mode else active_collision_layer
-	collision_mask = 0 if distant_mode else active_collision_mask
-	$VehicleLights.process_mode = Node.PROCESS_MODE_DISABLED if distant_mode else Node.PROCESS_MODE_INHERIT
-	$VehicleLights.visible = not distant_mode
-	if circle != null: circle.process_mode = Node.PROCESS_MODE_DISABLED if distant_mode else Node.PROCESS_MODE_INHERIT
-	if not distant_mode:
-		distant_elapsed = 0.0
-		update_car_pose(0.0)
+	# Distance affects visuals only; traffic collisions remain active across the map.
+	distant_mode = false
+	if exploded or not ambient_active: return
+	collision_layer = active_collision_layer
+	collision_mask = active_collision_mask
 
 func step_distant_route(delta: float) -> void:
 	if parked or not is_instance_valid(city): return
-	update_drive_speed(0.0 if should_wait_for_walk_light() or should_follow_car() else driving_speed, delta)
-	if turning: advance_turn(delta)
-	else:
-		plan_intersection_turn()
-		progress += current_driving_speed * delta
-		if turn_intent != 0 and (turn_center - route_position()).dot(travel_axis) <= 8.0: begin_turn()
-		elif progress > loop_extent:
-			progress = -loop_extent
-			considered_intersections.clear()
+	step_simple_route(delta)
 	var point := driving_position()
-	position = Vector3(point.x, city.height_at(point.x, point.z) + 0.09, point.z)
+	position = Vector3(point.x, preload("res://traffic_ground.gd").height(city,point.x, point.z) + 0.09, point.z)
 	var facing := (turn_curve(minf(1.0, turn_progress + 0.02)) - turn_curve(maxf(0.0, turn_progress - 0.02))).normalized() if turning else travel_axis
 	rotation.y = atan2(facing.x, facing.z)
 	motion_vector = facing * current_driving_speed
+	align_to_landscape(0.0)
 
 func _tick_traffic(delta: float) -> void:
+	if not ambient_active: return
 	if not Engine.is_editor_hint():
 		update_horn(delta)
 	if hybrid_reactions_enabled and hybrid:
@@ -482,30 +545,58 @@ func _tick_traffic(delta: float) -> void:
 	if parked:
 		$VehicleLights.set_driving_lights(false, false, false, false, false)
 		return
-	var police_circle := get_node_or_null("PoliceCircle")
-	if police_circle != null and police_circle.pursuing:
-		update_police_chase(delta)
-		return
-	var following_car := should_follow_car()
-	var truck_stopped := update_truck_avoidance(delta, following_car)
-	var stopped := hybrid_pending_strength > 0 or should_wait_for_walk_light() or following_car or truck_stopped
 	var previous_driving_speed := current_driving_speed
-	update_drive_speed(0.0 if stopped else driving_speed, delta)
-	if current_driving_speed > 0.001:
-		if turning:
-			advance_turn(delta)
-		else:
-			if absf(passing_offset) < 0.05:
-				plan_intersection_turn()
-			progress += current_driving_speed * delta
-			if turn_intent != 0 and (turn_center - route_position()).dot(travel_axis) <= 8.0:
-				begin_turn()
-			elif progress > loop_extent:
-				progress = -loop_extent
-				considered_intersections.clear()
+	step_simple_route(delta)
 	update_driving_suspension(clampf((current_driving_speed - previous_driving_speed) / maxf(delta, 0.001), -8.0, 4.0), delta)
-	$VehicleLights.set_driving_lights(stopped or driving_acceleration < -0.2, false, turn_intent < 0 or passing_truck, turn_intent > 0, false)
+	$VehicleLights.set_driving_lights(hybrid_pending_strength > 0 or driving_acceleration < -0.2, false, turn_intent < 0, turn_intent > 0, false)
 	update_car_pose(delta)
+
+func cache_route_end() -> void:
+	# Resolve the outer road junction once per straight leg, not every tick.
+	var topology: Variant = city.get("topology")
+	var current := route_position()
+	var vertical := absf(travel_axis.z) > 0.5
+	var lane_coordinate := current.x if vertical else current.z
+	var coordinate := lane_coordinate
+	if topology != null:
+		var nearest := INF
+		for value in (topology.verticals if vertical else topology.horizontals):
+			var gap := absf(float(value) - lane_coordinate)
+			if gap < nearest:
+				nearest = gap
+				coordinate = float(value)
+		var bounds: Rect2 = topology.street_bounds
+		var along := (bounds.end.y if travel_axis.z > 0 else bounds.position.y) if vertical else (bounds.end.x if travel_axis.x > 0 else bounds.position.x)
+		route_end_center = Vector3(coordinate, 0, along) if vertical else Vector3(along, 0, coordinate)
+	else:
+		route_end_center = lane_center + travel_axis * loop_extent
+	route_end_cached = true
+	route_has_exit = true
+
+func step_simple_route(delta: float) -> void:
+	if not route_end_cached: cache_route_end()
+	if not turning and turn_intent == 0 and route_has_exit:
+		var gap := (route_end_center - route_position()).dot(travel_axis)
+		if gap <= 20.0:
+			var left := Vector3(travel_axis.z, 0, -travel_axis.x)
+			var preferred := left if prefer_left_turn else -left
+			turn_center = route_end_center
+			if city.road_branch_exists(turn_center, preferred):
+				turn_intent = -1 if prefer_left_turn else 1
+			elif city.road_branch_exists(turn_center, -preferred):
+				turn_intent = 1 if prefer_left_turn else -1
+			else:
+				# Neither side has a road: hold at the end of this leg.
+				route_has_exit = false
+	var stopped := hybrid_pending_strength > 0 or not route_has_exit
+	update_drive_speed(0.0 if stopped else driving_speed, delta)
+	desired_passing_offset = 0.0
+	if turning:
+		advance_turn(delta)
+	elif route_has_exit:
+		progress += current_driving_speed * delta
+		if turn_intent != 0 and (turn_center - route_position()).dot(travel_axis) <= 8.0:
+			begin_turn()
 
 func braking_lookahead() -> float:
 	# Include time to ease into braking before reaching full deceleration.
@@ -591,7 +682,7 @@ func passing_lane_clear(offset: float) -> bool:
 	var origin := route_position() + right * offset
 	for distance in [0.0, 4.0, 8.0, 12.0, 18.0]:
 		var point: Vector3 = origin + travel_axis * distance
-		point.y = city.height_at(point.x, point.z) + 0.15
+		point.y = preload("res://traffic_ground.gd").height(city,point.x, point.z) + 0.15
 		if truck_blocks_motion(point, point):
 			return false
 		var query := PhysicsShapeQueryParameters3D.new()
@@ -617,7 +708,15 @@ func update_truck_avoidance(delta: float, queued: bool = false) -> bool:
 	var point := global_position
 	var blocked := truck_blocks_motion(point, point + travel_axis * maxf(12.0, braking_lookahead() + 6.0))
 	var parked_truck := truck_is_in_parking_bay() if blocked else false
-	var legal_passing := preload("res://city_road_rules.gd").passing_allowed(travel_axis, route_position())
+	var legal_passing := preload("res://city_road_rules.gd").passing_allowed(travel_axis, route_position(), city)
+	var passing_shift := -4.8*preload("res://city_road_rules.gd").lane_scale(city)
+	if city.get("topology") != null and city.topology.planned:
+		var vertical := absf(travel_axis.z) > .5
+		var at := route_position()
+		var coordinate := roundf(((at.x if vertical else at.z)+(128 if vertical else 144))/64)*64-(128 if vertical else 144)
+		if city.topology.artery_kind(vertical,coordinate) != "inner":
+			var center := Vector3(coordinate,0,at.z) if vertical else Vector3(at.x,0,coordinate)
+			passing_shift = (4.0 if (at-center).dot(Vector3(-travel_axis.z,0,travel_axis.x)) < 4*preload("res://city_road_rules.gd").lane_scale(city) else -4.0)*preload("res://city_road_rules.gd").lane_scale(city)
 	if not legal_passing: passing_truck = false
 	update_patience((blocked and not parked_truck) or queued, delta)
 	if passing_truck and (truck.global_position - point).dot(travel_axis) < -10.0:
@@ -625,14 +724,14 @@ func update_truck_avoidance(delta: float, queued: bool = false) -> bool:
 	if blocked:
 		if not parked_truck and patience_ratio <= 0.25:
 			honk()
-		if legal_passing and not turning and (parked_truck or patience_ratio <= 0.1) and passing_lane_clear(-4.8):
+		if legal_passing and not turning and (parked_truck or patience_ratio <= 0.1) and passing_lane_clear(passing_shift):
 			passing_truck = true
 	elif queued and patience_ratio <= 0.1:
 		honk()
-	var desired := -4.8 if passing_truck else 0.0
+	var desired := passing_shift if passing_truck else 0.0
 	desired_passing_offset = desired
 	# A clear passing corridor lets the car roll forward into a steered curve.
-	return (blocked and not passing_truck) or (passing_truck and not passing_lane_clear(-4.8))
+	return (blocked and not passing_truck) or (passing_truck and not passing_lane_clear(passing_shift))
 
 func configure_horn() -> void:
 	horn_rng.randomize()
@@ -723,9 +822,11 @@ func plan_intersection_turn() -> void:
 	for ix in range(-128, 129, 64):
 		for iz in range(-144, 177, 64):
 			var intersection := Vector3(ix, 0.0, iz)
-			var lane_offset := current - intersection - right * 4.0
-			var one_way := preload("res://city_road_rules.gd").one_way(absf(travel_axis.z) > 0.5, intersection.x if absf(travel_axis.z) > 0.5 else intersection.z)
-			if absf(lane_offset.dot(right)) > 1.5 and not (one_way != 0 and absf(lane_offset.dot(right) + 8.0) < 1.5):
+			var lane := 4.0*preload("res://city_road_rules.gd").lane_scale(city)
+			if city.get("topology") != null and city.topology.artery_kind(absf(travel_axis.z)>.5,intersection.x if absf(travel_axis.z)>.5 else intersection.z) != "inner": lane = (2.0 if (current-intersection).dot(right)<4*preload("res://city_road_rules.gd").lane_scale(city) else 6.0)*preload("res://city_road_rules.gd").lane_scale(city)
+			var lane_offset := current - intersection - right * lane
+			var one_way := preload("res://city_road_rules.gd").one_way(absf(travel_axis.z) > 0.5, intersection.x if absf(travel_axis.z) > 0.5 else intersection.z, city)
+			if absf(lane_offset.dot(right)) > 1.5 and not (one_way != 0 and absf(lane_offset.dot(right) + 8.0*preload("res://city_road_rules.gd").lane_scale(city)) < 1.5):
 				continue
 			var ahead := (intersection - current).dot(travel_axis)
 			if ahead < 13.0 or ahead > 20.0:
@@ -735,12 +836,15 @@ func plan_intersection_turn() -> void:
 				continue
 			considered_intersections[key] = true
 			var rules := preload("res://city_road_rules.gd")
-			var kind := rules.approach_kind(travel_axis, intersection, (current - intersection).dot(right))
+			var kind := rules.approach_kind(travel_axis, intersection, (current - intersection).dot(right), city)
 			var options: Array[int] = []
 			var left := Vector3(travel_axis.z, 0, -travel_axis.x)
-			if kind != "straight" and rules.allows(left, intersection): options.append(-1)
-			if kind == "unmarked" and rules.allows(-left, intersection): options.append(1)
-			if not options.is_empty() and (kind == "left" or traffic_rng.randf() < intersection_turn_chance):
+			var forward_open: bool = not is_instance_valid(city) or city.road_branch_exists(intersection,travel_axis)
+			var left_open: bool = not is_instance_valid(city) or city.road_branch_exists(intersection,left)
+			var right_open: bool = not is_instance_valid(city) or city.road_branch_exists(intersection,-left)
+			if (kind != "straight" or not forward_open) and rules.allows(left, intersection, city) and left_open: options.append(-1)
+			if (kind == "unmarked" or not forward_open) and rules.allows(-left, intersection, city) and right_open: options.append(1)
+			if not options.is_empty() and (not forward_open or kind == "left" or traffic_rng.randf() < intersection_turn_chance):
 				turn_intent = options[traffic_rng.randi_range(0, options.size() - 1)]
 				turn_center = intersection
 			return
@@ -752,7 +856,9 @@ func begin_turn() -> void:
 	var left := Vector3(travel_axis.z, 0.0, -travel_axis.x)
 	turn_exit_axis = left if turn_intent < 0 else -left
 	var exit_right := Vector3(-turn_exit_axis.z, 0.0, turn_exit_axis.x)
-	turn_end = turn_center + exit_right * 4.0 + turn_exit_axis * 8.0
+	var lane := 4.0*preload("res://city_road_rules.gd").lane_scale(city)
+	if city.get("topology") != null and city.topology.artery_kind(absf(turn_exit_axis.z)>.5,turn_center.x if absf(turn_exit_axis.z)>.5 else turn_center.z) != "inner": lane = (2.0 if turn_intent < 0 else 6.0)*preload("res://city_road_rules.gd").lane_scale(city)
+	turn_end = turn_center + exit_right * lane + turn_exit_axis * (12.0*preload("res://city_road_rules.gd").lane_scale(city))
 	turn_control_a = turn_start + travel_axis * 7.0
 	turn_control_b = turn_end - turn_exit_axis * 7.0
 	turn_length = maxf(10.0, turn_start.distance_to(turn_end) * 1.35)
@@ -765,6 +871,7 @@ func advance_turn(delta: float) -> void:
 		progress = turn_end.dot(travel_axis)
 		lane_center = turn_end - travel_axis * progress
 		turn_intent = 0
+		route_end_cached = false
 		considered_intersections.clear()
 		considered_intersections[Vector2i(roundi(turn_center.x), roundi(turn_center.z))] = true
 
@@ -776,7 +883,7 @@ func should_follow_car() -> bool:
 	if turning:
 		return false
 	for other in get_parent().get_children():
-		if other == self or not other is RigidBody3D or other.disabled or other.turning:
+		if other == self or not other is RigidBody3D or other.disabled or other.turning or not other.ambient_active:
 			continue
 		if travel_axis.dot(other.travel_axis) < 0.99 or lane_center.distance_to(other.lane_center) > 0.7:
 			continue
@@ -926,7 +1033,7 @@ func snap_collision_to_ground() -> void:
 			var offset: Vector3 = global_transform.basis * (collision_center + Vector3(local_x, -half_size.y, local_z))
 			var x := global_position.x + offset.x
 			var z := global_position.z + offset.z
-			var ground: float = city.terrain_surface_height_at(x, z)
+			var ground: float = preload("res://traffic_ground.gd").height(city,x,z)
 			required_y = maxf(required_y, ground - offset.y)
 	global_position.y = required_y + 0.025
 
@@ -1028,26 +1135,40 @@ func set_suspension_bone_pose(bone: int, pose: Transform3D) -> void:
 	spring_skeleton.set_bone_pose_rotation(bone, pose.basis.get_rotation_quaternion())
 	spring_skeleton.set_bone_pose_scale(bone, pose.basis.get_scale())
 
-func should_wait_for_walk_light() -> bool:
-	if not obey_crosswalks:
-		return false
+func front_bumper_distance() -> float:
+	var half: Vector3 = $CarCollision.shape.size*.5
+	var shape: Transform3D = $CarCollision.global_transform
+	return (shape.origin-global_position).dot(travel_axis)+absf(shape.basis.x.dot(travel_axis))*half.x+absf(shape.basis.y.dot(travel_axis))*half.y+absf(shape.basis.z.dot(travel_axis))*half.z
+
+func signal_stop_gap() -> float:
+	if not obey_crosswalks or turning or not is_instance_valid(city): return INF
+	var nearest := INF
+	var rules = preload("res://city_road_rules.gd")
 	for crossing in city.get_node("Crosswalks").get_children():
-		if not crossing.walk_allowed and not crossing.vehicle_yellow:
-			continue
-		var ahead: float
-		if crossing.crosses_vertical_road:
-			if absf(travel_axis.z) < 0.5 or absf(crossing.position.x-lane_center.x) > 5.0:
-				continue
-			ahead = (crossing.position.z-(lane_center.z+travel_axis.z*progress)) * travel_axis.z
-		else:
-			if absf(travel_axis.x) < 0.5:
-				continue
-			if absf(crossing.position.z-lane_center.z) > 5.0:
-				continue
-			ahead = (crossing.position.x-(lane_center.x+travel_axis.x*progress)) * travel_axis.x
-		if ahead > 1.5 and ahead < maxf(7.0, braking_lookahead() + $CarCollision.shape.size.z * 0.5):
-			return true
-	return false
+		if not crossing.walk_allowed and not crossing.vehicle_yellow: continue
+		var vertical: bool = absf(travel_axis.z) > .5
+		if crossing.crosses_vertical_road != vertical: continue
+		var junction: Vector3 = crossing.global_position
+		junction += Vector3(0,0,city.crosswalk_setback) if vertical else Vector3(city.crosswalk_setback,0,0)
+		var across: float = absf(junction.x-lane_center.x) if vertical else absf(junction.z-lane_center.z)
+		if across > city.road_width*.5: continue
+		var boundary: float = rules.stop_boundary(city,travel_axis,junction)
+		# The near edge of the 42 cm painted bar, plus a small bumper clearance.
+		var line := junction-travel_axis*(boundary+.21+.25)
+		var gap := (line-global_position).dot(travel_axis)-front_bumper_distance()
+		# Cars already committed past the line continue through the junction.
+		if gap < -.5: continue
+		nearest = minf(nearest,maxf(0,gap))
+	return nearest
+
+func signal_target_speed() -> float:
+	var gap := signal_stop_gap()
+	if gap == INF: return driving_speed
+	if gap < .04: return 0.0
+	return minf(driving_speed,minf(sqrt(2.0*maxf(.1,braking_rate)*.6*gap),gap*1.5))
+
+func should_wait_for_walk_light() -> bool:
+	return signal_target_speed() < driving_speed-.01
 
 func update_car_pose(delta: float) -> void:
 	if not is_instance_valid(city) or not city.has_method("height_at"):
@@ -1055,7 +1176,7 @@ func update_car_pose(delta: float) -> void:
 	var point := driving_position()
 	var facing := (turn_curve(minf(1.0, turn_progress + 0.02)) - turn_curve(maxf(0.0, turn_progress - 0.02))).normalized() if turning else travel_axis
 	if delta <= 0.0 or position.distance_to(point) > 50.0:
-		position = Vector3(point.x, city.height_at(point.x, point.z) + 0.09, point.z)
+		position = Vector3(point.x, preload("res://traffic_ground.gd").height(city,point.x, point.z) + 0.09, point.z)
 		rotation.y = atan2(facing.x, facing.z)
 		steering_angle = 0.0
 		motion_vector = Vector3.ZERO
@@ -1070,34 +1191,45 @@ func update_car_pose(delta: float) -> void:
 		var yaw_step := current_driving_speed / wheelbase * tan(steering_angle) * delta
 		var midpoint := rotation.y + yaw_step * 0.5
 		var vector := Vector3(sin(midpoint), 0, cos(midpoint)) * current_driving_speed
-		var next := position + vector * delta
-		next.y = city.height_at(next.x, next.z) + 0.09
-		if truck_blocks_motion(global_position, get_parent().to_global(next)):
+		var movement := vector*delta
+		var next := position + movement
+		next.y = preload("res://traffic_ground.gd").height(city,next.x, next.z) + 0.09
+		var start := position
+		var collision := move_and_collide(get_parent().global_basis * (next - position), false, 0.001)
+		motion_vector = (position - start) / delta
+		if collision != null:
+			var other := collision.get_collider()
+			var impact_velocity: Vector3 = get_parent().global_basis * vector
+			var approach := maxf(0.0, -(impact_velocity - collision.get_collider_velocity()).dot(collision.get_normal()))
+			if is_instance_valid(other) and other.has_method("receive_car_impact"):
+				other.receive_car_impact(approach, -collision.get_normal(), collision.get_position())
+			receive_car_impact(approach, collision.get_normal(), collision.get_position())
 			current_driving_speed = 0.0
 			driving_acceleration = 0.0
-			motion_vector = Vector3.ZERO
-		else:
-			motion_vector = (next - position) / delta
-			position = next
-			rotation.y += yaw_step
+		rotation.y += yaw_step
 		if not turning:
 			progress = (position - lane_center).dot(travel_axis)
 			passing_offset = (position - route_position()).dot(Vector3(-travel_axis.z, 0, travel_axis.x))
 		facing = Vector3(sin(rotation.y), 0, cos(rotation.y))
+	align_to_landscape(delta)
+
+func align_to_landscape(delta: float) -> void:
+	var facing := Vector3(sin(rotation.y),0,cos(rotation.y))
 	var x := position.x
 	var z := position.z
 	apply_chassis_suspension_pose()
 	var front := Vector2(x+facing.x*1.4,z+facing.z*1.4)
 	var rear := Vector2(x-facing.x*1.4,z-facing.z*1.4)
-	var pitch := -atan2(city.height_at(front.x,front.y)-city.height_at(rear.x,rear.y),2.8)
+	var pitch := -atan2(preload("res://traffic_ground.gd").height(city,front.x,front.y)-preload("res://traffic_ground.gd").height(city,rear.x,rear.y),2.8)
 	var right := Vector3(cos(rotation.y),0.0,-sin(rotation.y))
-	var right_h: float = city.height_at(x+right.x*1.1,z+right.z*1.1)
-	var left_h: float = city.height_at(x-right.x*1.1,z-right.z*1.1)
+	var right_h: float = preload("res://traffic_ground.gd").height(city,x+right.x*1.1,z+right.z*1.1)
+	var left_h: float = preload("res://traffic_ground.gd").height(city,x-right.x*1.1,z-right.z*1.1)
 	var roll := atan2(right_h-left_h,2.2)
 	var blend := 1.0 if delta <= 0.0 else 1.0-exp(-8.0*delta)
 	$Visual.rotation.x = lerp_angle($Visual.rotation.x,clampf(pitch,-0.3,0.3),blend)
 	$Visual.rotation.z = lerp_angle($Visual.rotation.z,clampf(roll,-0.3,0.3),blend)
 	$CarCollision.transform = $Visual.transform * Transform3D(Basis.IDENTITY, collision_center)
+	keep_landscape_clearance()
 	if spring_skeleton:
 		$VehicleLights.sync_with_chassis()
 	else:
@@ -1105,6 +1237,10 @@ func update_car_pose(delta: float) -> void:
 
 func update_police_chase(delta: float) -> void:
 	if not is_instance_valid(truck):
+		return
+	if truck.police_parking != null and truck.police_parking.active:
+		current_driving_speed = 0.0
+		motion_vector = Vector3.ZERO
 		return
 	var to_truck := truck.global_position - global_position
 	if PoliceDispatch.willing_stop(self) and to_truck.length() < 16.0:
@@ -1127,8 +1263,18 @@ func update_police_chase(delta: float) -> void:
 		motion_vector = Vector3.ZERO
 	else:
 		global_position = next
-		global_position.y = city.height_at(next.x, next.z) + 0.09
+		global_position.y = preload("res://traffic_ground.gd").height(city,next.x, next.z) + 0.09
 		rotation.y += yaw
 		motion_vector = movement / maxf(delta, 0.001)
-	apply_chassis_suspension_pose()
+	align_to_landscape(delta)
 	$VehicleLights.sync_with_chassis()
+
+func keep_landscape_clearance() -> void:
+	if not is_instance_valid(city): return
+	var half: Vector3 = $CarCollision.shape.size*.5
+	var lift := 0.0
+	for x in [-half.x,half.x]:
+		for z in [-half.z,half.z]:
+			var support: Vector3 = $CarCollision.global_transform*Vector3(x,-half.y,z)
+			lift = maxf(lift,preload("res://traffic_ground.gd").height(city,support.x,support.z)+.025-support.y)
+	global_position.y += lift

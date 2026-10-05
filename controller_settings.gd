@@ -24,6 +24,20 @@ func _ready() -> void:
 	$Layout/PausePanel/Resume.pressed.connect(resume_game)
 	$Layout/PausePanel/Options.pressed.connect(toggle)
 	$Layout/PausePanel/Quit.pressed.connect(func(): get_tree().quit())
+	var debug := Button.new()
+	debug.name = "Debug"
+	debug.text = "Debug menu"
+	debug.position = Vector2(30, 250)
+	debug.size = Vector2(360, 45)
+	debug.add_theme_font_size_override("font_size", 19)
+	$Layout/PausePanel.add_child(debug)
+	debug.pressed.connect(DebugMenu.open_menu)
+	$Layout/PausePanel/Resume.position.y = 90
+	$Layout/PausePanel/Resume.size.y = 45
+	$Layout/PausePanel/Options.position.y = 145
+	$Layout/PausePanel/Options.size.y = 45
+	$Layout/PausePanel/Quit.position.y = 200
+	$Layout/PausePanel/Quit.size.y = 45
 	$Layout/ControllerPanel/StickDeadzone.value=stick_deadzone
 	$Layout/ControllerPanel/TriggerDeadzone.value=trigger_deadzone
 	$Layout/ControllerPanel/SteeringSensitivity.value=steering_sensitivity
@@ -146,7 +160,7 @@ func _process(_delta: float) -> void:
 	for food in level.food_menu:menu_items.append("%s $%d"%[food.food_name,food.price])
 	$Layout/PatronPanel/Info.text="PATRONS %d / %d   •   FED %d\n%s\n%s\n%s"%[level.get_node("Patrons").get_child_count(),patron_manager.maximum_patrons,patron_manager.served_orders," / ".join(menu_items),pad_status,patron_manager.last_sale]
 	var seconds = ceili(level.remaining_time)
-	$Layout/SessionPanel/TimeLabel.text="TIME %d:%02d"%[seconds/60,seconds%60]
+	$Layout/SessionPanel/TimeLabel.text="TIME %d:%02d"%[int(float(seconds)/60.0),seconds%60]
 	$Layout/SessionPanel/MoneyLabel.text="MONEY $%d"%level.money
 	$Layout/SessionPanel/GoalLabel.text="EARNED $%d / $%d • INGREDIENTS %d"%[level.money_earned,level.earnings_target,level.ingredients]
 	$Layout/SessionPanel/LuckLabel.text="Carried from last round" if level.carried_balance else "Starting luck %s$%d"%["+" if level.starting_luck>=0 else "-",absi(level.starting_luck)]
@@ -165,8 +179,16 @@ func _process(_delta: float) -> void:
 	$Layout/RepairPanel/Ingredients.visible = not upgrade_tab
 	$Layout/RepairPanel/Ingredients.text = "Ingredients +%d — $%d  (Stock %d/%d)" % [ingredient_quote.amount, ingredient_quote.price, level.ingredients, level.ingredient_capacity]
 	$Layout/RepairPanel/Ingredients.disabled = ingredient_quote.amount <= 0 or ingredient_quote.price > level.money
-	$Layout/BoostPanel/BoostMeter.value=truck.boost_fuel/truck.boost_capacity*100.0
-	$Layout/BoostPanel/BoostLabel.text="BOOST %d%% — HOLD RB / SHIFT"%roundi(truck.boost_fuel/truck.boost_capacity*100.0) if truck.booster_owned else "BOOST — BUY BOOSTER + CANISTERS"
+	var boost_percent := roundi(truck.boost_fuel / truck.boost_capacity * 100.0)
+	$Layout/BoostPanel/BoostMeter.value = boost_percent
+	var boost_text := "BOOST READY %d%%" % boost_percent
+	if not truck.booster_owned:
+		boost_text = "BOOST - BUY BOOSTER + CANISTERS"
+	elif truck.boost_active:
+		boost_text = "BOOST ACTIVE %d%%" % boost_percent
+	elif truck.boost_fuel <= 0.01:
+		boost_text = "BOOST EMPTY"
+	$Layout/BoostPanel/BoostLabel.text = boost_text
 	var upgrades=[$Layout/RepairPanel/UpgradeList/Booster,$Layout/RepairPanel/UpgradeList/Canister,$Layout/RepairPanel/UpgradeList/Drifting,$Layout/RepairPanel/UpgradeList/LiftKit,$Layout/RepairPanel/UpgradeList/Armor,$Layout/RepairPanel/UpgradeList/FullSelfDriving]
 	var upgrade_names=["Booster","Boost canister (+50%)","Drifting","Lift kit","Armor","Full Self Driving"]
 	for i in 6:
@@ -189,7 +211,7 @@ func _process(_delta: float) -> void:
 		$Layout/RoundEndPanel/Restart.grab_focus()
 	$Layout/RoundEndPanel/Title.text="SUCCESS!" if level.round_won else "GAME OVER"
 	$Layout/RoundEndPanel/Title.modulate=Color("66dfb4") if level.round_won else Color("f49a76")
-	$Layout/RoundEndPanel/Summary.text="%s\nEarned $%d / $%d target\nBalance $%d   •   Time left %d:%02d"%["Money target reached!" if level.round_won else "Time ran out before the money target.",level.money_earned,level.earnings_target,level.money,seconds/60,seconds%60]
+	$Layout/RoundEndPanel/Summary.text="%s\nEarned $%d / $%d target\nBalance $%d   •   Time left %d:%02d"%["Money target reached!" if level.round_won else "Time ran out before the money target.",level.money_earned,level.earnings_target,level.money,int(float(seconds)/60.0),seconds%60]
 
 func restart_round() -> void:
 	if get_parent().has_method("request_restart"):

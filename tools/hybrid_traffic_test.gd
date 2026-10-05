@@ -8,53 +8,61 @@ func run() -> void:
 	scene.get_node("ProceduralCity").randomize_each_load = false
 	root.add_child(scene)
 	current_scene = scene
-	await process_frame
+	while not scene.is_loading_ready(): await process_frame
 	scene.truck.set_physics_process(false)
 	var city = scene.get_node("ProceduralCity")
 	for car in get_nodes_in_group("traffic_motion"):
 		car.set_physics_process(false)
 	var models := 0
 	for path in city.traffic_car_models:
-		var car = city.traffic_car_scene.instantiate()
-		car.model_scene = load(path)
-		car.parked = true
-		city.get_node("Traffic").add_child(car)
-		car.set_physics_process(false)
-		assert(car.hybrid != null and car.freeze and car.hybrid.wheels.size() == 4)
-		assert(is_zero_approx(car.hybrid.model_root.rotation.y), "Production +Z orientation must be preserved")
-		car.global_position = Vector3(300, city.height_at(300, 300) + 0.09, 300)
+		var branch_car = city.traffic_car_scene.instantiate()
+		branch_car.model_scene = load(path)
+		branch_car.parked = true
+		city.get_node("Traffic").add_child(branch_car)
+		branch_car.set_physics_process(false)
+		assert(branch_car.hybrid != null and branch_car.freeze and branch_car.hybrid.wheels.size() == 4)
+		assert(is_zero_approx(branch_car.hybrid.model_root.rotation.y), "Production +Z orientation must be preserved")
+		branch_car.global_position = Vector3(300, city.height_at(300, 300) + 0.09, 300)
 		await physics_frame
-		assert(car.receive_vehicle_contact(Vector3.RIGHT * 3, Vector3.RIGHT, car.global_position))
-		assert(not car.disabled and car.hybrid.state == car.hybrid.State.REACTION)
+		assert(branch_car.receive_vehicle_contact(Vector3.RIGHT * 3, Vector3.RIGHT, branch_car.global_position))
+		assert(not branch_car.disabled and branch_car.hybrid.state == branch_car.hybrid.State.REACTION)
 		for tick in 300:
-			car._physics_process(1.0 / 60.0)
-		assert(not car.disabled and car.hybrid.state == car.hybrid.State.DRIVING)
+			branch_car._physics_process(1.0 / 60.0)
+		assert(not branch_car.disabled and branch_car.hybrid.state == branch_car.hybrid.State.DRIVING)
 		for local_push in [Vector3.FORWARD, Vector3.BACK, Vector3(1, 0, -1).normalized()]:
-			car.hybrid_hit_cooldown = 0
-			var world_push: Vector3 = car.global_basis * local_push
-			assert(car.receive_vehicle_contact(world_push * 3, world_push, car.global_position))
+			branch_car.hybrid_hit_cooldown = 0
+			var world_push: Vector3 = branch_car.global_basis * local_push
+			assert(branch_car.receive_vehicle_contact(world_push * 3, world_push, branch_car.global_position))
 			for tick in 10:
-				car._physics_process(1.0 / 60.0)
-			assert(signf(car.hybrid.pose.x) == signf(local_push.z))
-			assert(signf(car.hybrid.pose.z) == -signf(local_push.x))
+				branch_car._physics_process(1.0 / 60.0)
+			assert(signf(branch_car.hybrid.pose.x) == signf(local_push.z))
+			assert(signf(branch_car.hybrid.pose.z) == -signf(local_push.x))
 			for tick in 300:
-				car._physics_process(1.0 / 60.0)
-			assert(not car.disabled and car.hybrid.state == car.hybrid.State.DRIVING)
-		car.hybrid_hit_cooldown = 0
-		car.hybrid.tire_friction = 1.0
-		var rollover_start: Vector3 = car.global_position
-		assert(car.receive_vehicle_contact(Vector3.RIGHT * 11.8, Vector3.RIGHT, car.global_position))
+				branch_car._physics_process(1.0 / 60.0)
+			assert(not branch_car.disabled and branch_car.hybrid.state == branch_car.hybrid.State.DRIVING)
+		branch_car.hybrid_hit_cooldown = 0
+		branch_car.hybrid.tire_friction = 1.0
+		var rollover_start: Vector3 = branch_car.global_position
+		assert(branch_car.receive_vehicle_contact(Vector3.RIGHT * 11.8, Vector3.RIGHT, branch_car.global_position))
 		for tick in 80:
-			car._physics_process(1.0 / 60.0)
-		assert(car.disabled and car.hybrid.state == car.hybrid.State.DISABLED and not car.exploded)
-		assert((car.global_position - rollover_start).dot(Vector3.RIGHT) > 0.2, "Production owner must move with rollover")
-		var state: Dictionary = car.get_hybrid_snapshot()
-		assert(state.root.is_equal_approx(car.global_transform) and state.rolling.distance > 0)
-		assert(state.disabled and state.wheels.size() == 4 and state.state == car.hybrid.State.DISABLED)
-		car.queue_free()
+			branch_car._physics_process(1.0 / 60.0)
+		assert(branch_car.disabled and branch_car.hybrid.state == branch_car.hybrid.State.DISABLED and not branch_car.exploded)
+		assert((branch_car.global_position - rollover_start).dot(Vector3.RIGHT) > 0.2, "Production owner must move with rollover")
+		var state: Dictionary = branch_car.get_hybrid_snapshot()
+		assert(state.root.is_equal_approx(branch_car.global_transform) and state.rolling.distance > 0)
+		assert(state.disabled and state.wheels.size() == 4 and state.state == branch_car.hybrid.State.DISABLED)
+		branch_car.queue_free()
 		models += 1
 	# Moving traffic brakes under the existing controller before contact anchoring.
-	var car = city.get_node("Traffic").get_child(0)
+	# Use an isolated fresh car; simplified traffic can legitimately crash into
+	# other spawned cars while the production rig checks are running.
+	var car = city.traffic_car_scene.instantiate()
+	car.model_scene = load(city.traffic_car_models[0])
+	car.lane_center = Vector3(300, 0, 0)
+	car.progress = -300.0
+	city.get_node("Traffic").add_child(car)
+	car.set_physics_process(false)
+	await process_frame
 	car.distant_mode = false
 	car.current_driving_speed = 8.0
 	car.hybrid_hit_cooldown = 0

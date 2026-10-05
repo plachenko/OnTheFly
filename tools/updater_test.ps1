@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 $workspace = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
-. (Join-Path $workspace 'OnTheFly_Windows\Update_Game.ps1') -LibraryOnly
+. (Join-Path $PSScriptRoot 'updater\Update_Game.ps1') -LibraryOnly
 $testRoot = Join-Path $workspace ('Food_Truck_Drive\.godot\updater-test-' + [guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($testRoot) | Out-Null
 $script:InstallRoot = Join-Path $testRoot 'installed'

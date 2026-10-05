@@ -261,7 +261,7 @@ func update_tires(normal: Vector3, plane: Vector3, roll: float) -> void:
 			var terrain_wheel_basis := Basis(normal.cross(-forward).normalized(), normal, -forward)
 			var release := 0.0 if state == State.DRIVING else clampf((absf(roll) - deg_to_rad(40)) / deg_to_rad(15), 0, 1)
 			release = release * release * (3.0 - 2.0 * release)
-			wheel_basis = terrain_wheel_basis.slerp(visual.global_basis, release)
+			wheel_basis = terrain_wheel_basis.orthonormalized().slerp(visual.global_basis.orthonormalized(), release)
 			var anchor: Vector3 = wheel.anchor
 			if state == State.DRIVING:
 				anchor = center + normal * (wheel.radius + 0.02 - normal.dot(center - plane))
@@ -296,7 +296,7 @@ func apply_ground_pose(ground: Dictionary, angles: Vector3) -> void:
 	visual.basis = terrain_basis * (Basis(axis.normalized(), axis.length()) if axis.length_squared() > 0.000001 else Basis.IDENTITY)
 	# Keep the chassis pivot fixed relative to the terrain frame while rotating.
 	var pivot := contact_pivot if contact_locked else chassis_pivot
-	visual.position = terrain_basis * pivot - visual.basis * pivot + Vector3(0, 0 if contact_locked else pose.y + driving_pose.y, 0)
+	visual.position = terrain_basis * pivot - visual.basis * pivot + Vector3(0, 0.0 if contact_locked else pose.y + driving_pose.y, 0)
 	if contact_locked:
 		visual.global_position = contact_pivot_world - visual.global_basis * contact_pivot
 		if tip_axis.length_squared() < 0.01:
@@ -319,6 +319,8 @@ func excluded_bodies() -> Array[RID]:
 	return result
 
 func ground_sample() -> Dictionary:
+	if external_owner and is_instance_valid(external_owner.city) and state in [State.DRIVING,State.REACTION]:
+		return preload("res://traffic_ground.gd").sample(external_owner.city,external_owner.global_position)
 	var query := PhysicsRayQueryParameters3D.create(global_position + Vector3.UP * 2.0, global_position - Vector3.UP * 3.0, support_collision_mask, excluded_bodies())
 	return get_world_3d().direct_space_state.intersect_ray(query)
 

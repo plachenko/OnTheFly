@@ -1,0 +1,330 @@
+{
+	"clips": {
+		"accelerate": {
+			"duration": 1.0,
+			"keys": [
+				{
+					"heave": 0.0,
+					"label": "Rest",
+					"pitch": 0.0,
+					"roll": 0.0,
+					"time": 0.0,
+					"yaw": 0.0
+				},
+				{
+					"heave": 0.012,
+					"label": "Anticipation",
+					"pitch": 1.2,
+					"roll": 0.0,
+					"time": 0.12,
+					"yaw": 0.0
+				},
+				{
+					"heave": -0.06,
+					"label": "Peak",
+					"pitch": -6.0,
+					"roll": 0.0,
+					"time": 0.34,
+					"yaw": 0.0
+				},
+				{
+					"heave": 0.027,
+					"label": "Rebound",
+					"pitch": 2.7,
+					"roll": 0.0,
+					"time": 0.62,
+					"yaw": 0.0
+				},
+				{
+					"heave": 0.0,
+					"label": "Settle",
+					"pitch": 0.0,
+					"roll": 0.0,
+					"time": 1.0,
+					"yaw": 0.0
+				}
+			],
+			"loop": false
+		},
+		"brake": {
+			"duration": 1.0,
+			"keys": [
+				{
+					"heave": 0.0,
+					"label": "Rest",
+					"pitch": 0.0,
+					"roll": 0.0,
+					"time": 0.0,
+					"yaw": 0.0
+				},
+				{
+					"heave": 0.016,
+					"label": "Anticipation",
+					"pitch": -1.8,
+					"roll": 0.0,
+					"time": 0.12,
+					"yaw": 0.0
+				},
+				{
+					"heave": -0.08,
+					"label": "Peak",
+					"pitch": 9.0,
+					"roll": 0.0,
+					"time": 0.34,
+					"yaw": 0.0
+				},
+				{
+					"heave": 0.036,
+					"label": "Rebound",
+					"pitch": -4.05,
+					"roll": 0.0,
+					"time": 0.62,
+					"yaw": 0.0
+				},
+				{
+					"heave": 0.0,
+					"label": "Settle",
+					"pitch": 0.0,
+					"roll": 0.0,
+					"time": 1.0,
+					"yaw": 0.0
+				}
+			],
+			"loop": false
+		},
+		"donut": {
+			"duration": 1.0,
+			"keys": [
+				{
+					"heave": 0.0,
+					"label": "Rest",
+					"pitch": 0.0,
+					"roll": 0.0,
+					"time": 0.0,
+					"yaw": 0.0
+				},
+				{
+					"heave": -0.012,
+					"label": "Anticipation",
+					"pitch": 0.0,
+					"roll": -1.6,
+					"time": 0.12,
+					"yaw": -0.8
+				},
+				{
+					"heave": 0.06,
+					"label": "Peak",
+					"pitch": 0.0,
+					"roll": 8.0,
+					"time": 0.34,
+					"yaw": 4.0
+				},
+				{
+					"heave": -0.027,
+					"label": "Rebound",
+					"pitch": 0.0,
+					"roll": -3.6,
+					"time": 0.62,
+					"yaw": -1.8
+				},
+				{
+					"heave": 0.0,
+					"label": "Settle",
+					"pitch": 0.0,
+					"roll": 0.0,
+					"time": 1.0,
+					"yaw": 0.0
+				}
+			],
+			"loop": true
+		},
+		"idle": {
+			"duration": 1.0,
+			"keys": [
+				{
+					"heave": 0.0,
+					"label": "Rest",
+					"pitch": 0.0,
+					"roll": 0.0,
+					"time": 0.0,
+					"yaw": 0.0
+				},
+				{
+					"heave": -0.003,
+					"label": "Anticipation",
+					"pitch": 0.0,
+					"roll": 0.0,
+					"time": 0.12,
+					"yaw": 0.0
+				},
+				{
+					"heave": 0.015,
+					"label": "Peak",
+					"pitch": 0.0,
+					"roll": 0.0,
+					"time": 0.34,
+					"yaw": 0.0
+				},
+				{
+					"heave": -0.00675,
+					"label": "Rebound",
+					"pitch": 0.0,
+					"roll": 0.0,
+					"time": 0.62,
+					"yaw": 0.0
+				},
+				{
+					"heave": 0.0,
+					"label": "Settle",
+					"pitch": 0.0,
+					"roll": 0.0,
+					"time": 1.0,
+					"yaw": 0.0
+				}
+			],
+			"loop": true
+		},
+		"stop": {
+			"duration": 1.0,
+			"keys": [
+				{
+					"heave": 0.0,
+					"label": "Rest",
+					"pitch": 0.0,
+					"roll": 0.0,
+					"time": 0.0,
+					"yaw": 0.0
+				},
+				{
+					"heave": 0.008,
+					"label": "Anticipation",
+					"pitch": -0.8,
+					"roll": 0.0,
+					"time": 0.12,
+					"yaw": 0.0
+				},
+				{
+					"heave": -0.04,
+					"label": "Peak",
+					"pitch": 4.0,
+					"roll": 0.0,
+					"time": 0.34,
+					"yaw": 0.0
+				},
+				{
+					"heave": 0.018,
+					"label": "Rebound",
+					"pitch": -1.8,
+					"roll": 0.0,
+					"time": 0.62,
+					"yaw": 0.0
+				},
+				{
+					"heave": 0.0,
+					"label": "Settle",
+					"pitch": 0.0,
+					"roll": 0.0,
+					"time": 1.0,
+					"yaw": 0.0
+				}
+			],
+			"loop": false
+		},
+		"turn_left": {
+			"duration": 1.0,
+			"keys": [
+				{
+					"heave": 0.0,
+					"label": "Rest",
+					"pitch": 0.0,
+					"roll": 0.0,
+					"time": 0.0,
+					"yaw": 0.0
+				},
+				{
+					"heave": 0.0,
+					"label": "Anticipation",
+					"pitch": 0.0,
+					"roll": 1.4,
+					"time": 0.12,
+					"yaw": -0.4
+				},
+				{
+					"heave": 0.0,
+					"label": "Peak",
+					"pitch": 0.0,
+					"roll": -7.0,
+					"time": 0.34,
+					"yaw": 2.0
+				},
+				{
+					"heave": 0.0,
+					"label": "Rebound",
+					"pitch": 0.0,
+					"roll": 3.15,
+					"time": 0.62,
+					"yaw": -0.9
+				},
+				{
+					"heave": 0.0,
+					"label": "Settle",
+					"pitch": 0.0,
+					"roll": 0.0,
+					"time": 1.0,
+					"yaw": 0.0
+				}
+			],
+			"loop": true
+		},
+		"turn_right": {
+			"duration": 1.0,
+			"keys": [
+				{
+					"heave": 0.0,
+					"label": "Rest",
+					"pitch": 0.0,
+					"roll": 0.0,
+					"time": 0.0,
+					"yaw": 0.0
+				},
+				{
+					"heave": 0.0,
+					"label": "Anticipation",
+					"pitch": 0.0,
+					"roll": -1.4,
+					"time": 0.12,
+					"yaw": 0.4
+				},
+				{
+					"heave": 0.0,
+					"label": "Peak",
+					"pitch": 0.0,
+					"roll": 7.0,
+					"time": 0.34,
+					"yaw": -2.0
+				},
+				{
+					"heave": 0.0,
+					"label": "Rebound",
+					"pitch": 0.0,
+					"roll": -3.15,
+					"time": 0.62,
+					"yaw": 0.9
+				},
+				{
+					"heave": 0.0,
+					"label": "Settle",
+					"pitch": 0.0,
+					"roll": 0.0,
+					"time": 1.0,
+					"yaw": 0.0
+				}
+			],
+			"loop": true
+		}
+	},
+	"name": "Expressive truck",
+	"strength": 1.0,
+	"truck_id": "food_truck",
+	"version": 1
+}

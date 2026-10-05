@@ -1,10 +1,6 @@
 [gd_scene format=3]
 
 [ext_resource type="Script" path="res://patron.gd" id="1_xmfng"]
-[ext_resource type="PackedScene" path="res://assets/kenney/criminalMaleA.glb" id="2_lgh3h"]
-[ext_resource type="PackedScene" path="res://assets/kenney/cyborgFemaleA.glb" id="3_8wf6y"]
-[ext_resource type="PackedScene" path="res://assets/kenney/skaterFemaleA.glb" id="4_j0y3w"]
-[ext_resource type="PackedScene" path="res://assets/kenney/skaterMaleA.glb" id="5_i41yd"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_tlqhk"]
 radius = 0.36
@@ -26,20 +22,5 @@ billboard = 1
 text = "Hungry"
 font_size = 36
 
-[node name="VisualVariants" type="Node3D" parent="." unique_id=644835463]
-scale = Vector3(1.2, 1.2, 1.2)
+[node name="VisualVariants" type="Node3D" parent="."]
 
-[node name="criminalMaleA" type="Node3D" parent="VisualVariants" unique_id=902949818 instance=ExtResource("2_lgh3h")]
-transform = Transform3D(0.3, 0, 0, 0, 0.43, 0, 0, 0, 0.43, 0, 0, 0)
-
-[node name="cyborgFemaleA" type="Node3D" parent="VisualVariants" unique_id=1179476989 instance=ExtResource("3_8wf6y")]
-transform = Transform3D(0.3, 0, 0, 0, 0.43, 0, 0, 0, 0.43, 0, 0, 0)
-visible = false
-
-[node name="skaterFemaleA" type="Node3D" parent="VisualVariants" unique_id=1870127474 instance=ExtResource("4_j0y3w")]
-transform = Transform3D(0.3, 0, 0, 0, 0.43, 0, 0, 0, 0.43, 0, 0, 0)
-visible = false
-
-[node name="skaterMaleA" type="Node3D" parent="VisualVariants" unique_id=441117482 instance=ExtResource("5_i41yd")]
-transform = Transform3D(0.3, 0, 0, 0, 0.43, 0, 0, 0, 0.43, 0, 0, 0)
-visible = false

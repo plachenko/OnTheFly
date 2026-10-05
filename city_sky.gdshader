@@ -1,14 +1,14 @@
 shader_type sky;
 
-uniform vec4 zenith_color : source_color = vec4(0.30, 0.51, 0.70, 1.0);
-uniform vec4 horizon_color : source_color = vec4(0.72, 0.82, 0.84, 1.0);
+uniform vec4 zenith_color : source_color = vec4(0.19, 0.46, 0.79, 1.0);
+uniform vec4 horizon_color : source_color = vec4(0.58, 0.76, 0.91, 1.0);
 uniform vec4 far_city_color : source_color = vec4(0.51, 0.63, 0.68, 1.0);
 uniform vec4 near_city_color : source_color = vec4(0.34, 0.47, 0.54, 1.0);
 uniform float skyline_height : hint_range(0.03, 0.25) = 0.14;
 uniform float skyline_vertical_offset : hint_range(-0.15, 0.1) = -0.045;
 uniform vec4 cloud_color : source_color = vec4(0.93, 0.96, 0.97, 1.0);
-uniform float cloud_coverage : hint_range(0.0, 1.0) = 0.48;
-uniform float cloud_opacity : hint_range(0.0, 1.0) = 0.55;
+uniform float cloud_coverage : hint_range(0.0, 1.0) = 0.30;
+uniform float cloud_opacity : hint_range(0.0, 1.0) = 0.38;
 uniform vec4 sun_color : source_color = vec4(1.0, 0.91, 0.69, 1.0);
 uniform vec3 sun_direction = vec3(-0.3838, 0.7431, 0.5481);
 
@@ -59,7 +59,12 @@ void sky() {
 	color = mix(color, far_city_color.rgb, far_buildings * 0.72);
 	color = mix(color, near_city_color.rgb, near_buildings * 0.82);
 	float sun_alignment = max(dot(normalize(EYEDIR), normalize(sun_direction)), 0.0);
-	color += sun_color.rgb * pow(sun_alignment, 32.0) * 0.24;
+	vec3 sun_axis = normalize(sun_direction);
+	vec3 sun_right = normalize(cross(sun_axis, vec3(0.0, 1.0, 0.0)));
+	vec3 sun_up = cross(sun_right, sun_axis);
+	float flare_angle = atan(dot(EYEDIR, sun_up), dot(EYEDIR, sun_right));
+	float rays = pow(abs(cos(flare_angle * 6.0)), 10.0);
+	color += sun_color.rgb * (pow(sun_alignment, 24.0) * 0.20 + pow(sun_alignment, 180.0) * (0.32 + rays * 0.30));
 	color = mix(color, sun_color.rgb, smoothstep(0.9989, 0.9995, sun_alignment));
 	COLOR = color;
 }

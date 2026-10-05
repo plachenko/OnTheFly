@@ -7,9 +7,14 @@ func run() -> void:
 	var scene = load("res://procedural_city.tscn").instantiate()
 	var city = scene.get_node("ProceduralCity")
 	city.randomize_each_load = false
-	city.time_of_day_mode = 2
+	city.set_meta("full_city_required", true)
 	root.add_child(scene)
-	await process_frame
+	while not scene.is_loading_ready(): await process_frame
+	city.is_night = true
+	city.configure_time_of_day()
+	# The bundled fixture is a daytime city; exercise the production night-light pass.
+	for model in city.get_node("Buildings").find_children("KenneyBuilding", "Node3D", true, false):
+		city.add_building_window_lights(model, "")
 	var meshes: Array[Node] = city.get_node("Buildings").find_children("*", "MeshInstance3D", true, false)
 	var emissive := 0
 	var mixed_buildings := 0

@@ -29,12 +29,12 @@ func sell_to(world: Node, guest: int) -> void:
 	patron.global_position = patron.queue_target()
 	var before: int = world.money
 	var completed: bool = manager.complete_order(patron)
-	var duplicate: bool = manager.complete_order(patron)
+	var duplicate_sale: bool = manager.complete_order(patron)
 	if not (completed):
 		push_error("Multiplayer runtime check failed")
 		get_tree().quit(1)
 		return
-	if not (not duplicate):
+	if not (not duplicate_sale):
 		push_error("Multiplayer runtime check failed")
 		get_tree().quit(1)
 		return
@@ -47,6 +47,13 @@ func sell_to(world: Node, guest: int) -> void:
 		push_error("Multiplayer runtime check failed")
 		get_tree().quit(1)
 		return
+	assert(world.accounts[guest].experience == 10)
+	assert(world.accounts[1].experience == 0)
+	previous = world.select_player(guest)
+	assert(world.register_car_collision(world.trucks[guest], world.trucks[1], 12.0))
+	world.select_player(previous)
+	assert(world.accounts[guest].license_points == 1)
+	assert(world.accounts[1].license_points == 0)
 
 func run() -> void:
 	host_mode = "--mp-host" in OS.get_cmdline_user_args()
@@ -102,6 +109,10 @@ func run() -> void:
 		else:
 			if world.accounts[world.local_player].money_earned >= 10:
 				Input.action_release("accelerate")
+				assert(world.accounts[world.local_player].experience == 10)
+				assert(world.accounts[1].experience == 0)
+				assert(world.accounts[world.local_player].license_points == 1)
+				assert(world.accounts[1].license_points == 0)
 				if not (world.accounts[1].money == 200):
 					push_error("Multiplayer runtime check failed")
 					get_tree().quit(1)

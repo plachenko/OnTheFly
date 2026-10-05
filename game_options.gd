@@ -17,7 +17,7 @@ func _ready() -> void:
     apply_audio()
 
 func apply_video() -> void:
-    get_tree().root.msaa_3d=antialiasing
+    get_tree().root.msaa_3d=antialiasing as Viewport.MSAA
     if DisplayServer.get_name()=="headless":return
     DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN if fullscreen else DisplayServer.WINDOW_MODE_WINDOWED)
     if not fullscreen:DisplayServer.window_set_size(WINDOW_SIZES[window_size_index])

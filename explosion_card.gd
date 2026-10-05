@@ -20,11 +20,11 @@ func _ready() -> void:
 	frames.set_animation_loop("default", false)
 	frames.set_animation_speed("default", 12.0)
 	for index in FRAME_COUNT:
-		var frame := AtlasTexture.new()
-		frame.atlas = sheet
-		frame.region = Rect2(Vector2(index % GRID, index / GRID) * cell, cell)
-		frame.filter_clip = true
-		frames.add_frame("default", frame)
+		var atlas_frame := AtlasTexture.new()
+		atlas_frame.atlas = sheet
+		atlas_frame.region = Rect2(Vector2(index % GRID, floori(float(index) / GRID)) * cell, cell)
+		atlas_frame.filter_clip = true
+		frames.add_frame("default", atlas_frame)
 	sprite_frames = frames
 	billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	shaded = false

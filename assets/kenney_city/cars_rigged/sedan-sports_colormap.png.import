@@ -4,8 +4,9 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://bk1dvmqt0ggy7"
 path.s3tc="res://.godot/imported/sedan-sports_colormap.png-c3d3d0272bb0d0ebe3d9aaa580adc225.s3tc.ctex"
+path.etc2="res://.godot/imported/sedan-sports_colormap.png-c3d3d0272bb0d0ebe3d9aaa580adc225.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 generator_parameters={
@@ -15,7 +16,7 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/kenney_city/cars_rigged/sedan-sports_colormap.png"
-dest_files=["res://.godot/imported/sedan-sports_colormap.png-c3d3d0272bb0d0ebe3d9aaa580adc225.s3tc.ctex"]
+dest_files=["res://.godot/imported/sedan-sports_colormap.png-c3d3d0272bb0d0ebe3d9aaa580adc225.s3tc.ctex", "res://.godot/imported/sedan-sports_colormap.png-c3d3d0272bb0d0ebe3d9aaa580adc225.etc2.ctex"]
 
 [params]
 

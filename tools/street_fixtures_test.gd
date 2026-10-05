@@ -31,8 +31,8 @@ func run() -> void:
 			for vertex in visual.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]:
 				var along: float = vertex.z if vertical else vertex.x
 				for cross in ([-144, -80, -16, 48, 112, 176] if vertical else [-128, -64, 0, 64, 128]):
-					var sign := 1.0 if along < cross else -1.0
-					var axis := Vector3(0, 0, sign) if vertical else Vector3(sign, 0, 0)
+					var road_sign := 1.0 if along < cross else -1.0
+					var axis := Vector3(0, 0, road_sign) if vertical else Vector3(road_sign, 0, 0)
 					var junction := Vector3(road.position.x, 0, cross) if vertical else Vector3(cross, 0, road.position.z)
 					assert(absf(along - cross) > rules.stop_boundary(city, axis, junction) + 0.21)
 			splits += 1

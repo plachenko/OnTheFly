@@ -10,6 +10,11 @@ var controller_buttons: Dictionary = {}
 var view_chords: Dictionary = {}
 var performance_label: Label
 var performance_refresh := 0.0
+var baseline_options: Dictionary = {}
+var comparison_options: Dictionary = {}
+var all_baseline: CheckBox
+const BASELINE_PROPERTIES := {"Traffic": "traffic_enabled", "Traffic logic": "traffic_logic_enabled", "Pedestrian logic and spawning": "pedestrian_logic_enabled", "Detailed buildings": "buildings_as_blocks"}
+const COMPARISON_PROPERTIES := {"Full-distance traffic simulation": "traffic_lod_enabled", "Full-detail distant rendering": "rendering_lod_enabled", "Unoptimized multiplayer snapshots": "optimized_snapshots"}
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -21,17 +26,22 @@ func _ready() -> void:
 	add_child(panel)
 	var rows := VBoxContainer.new()
 	rows.add_theme_constant_override("separation", 12)
-	panel.add_child(rows)
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(640, 600)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.follow_focus = true
+	panel.add_child(scroll)
+	scroll.add_child(rows)
 	var title := Label.new()
 	title.text = "Debug menu — F3 / View"
 	rows.add_child(title)
 	var vectors := CheckBox.new()
-	vectors.text = "Show car motion vectors"
+	vectors.text = "Car motion vectors"
 	vectors.toggled.connect(func(enabled: bool): vectors_enabled = enabled)
 	rows.add_child(vectors)
 	hide_ui = CheckBox.new()
-	hide_ui.text = "Hide game UI"
-	hide_ui.toggled.connect(func(enabled: bool): ScreenshotCapture.set_screenshot_mode(enabled))
+	hide_ui.text = "Game UI"
+	hide_ui.toggled.connect(func(enabled: bool): ScreenshotCapture.set_screenshot_mode(not enabled))
 	rows.add_child(hide_ui)
 	var hint := Label.new()
 	hint.text = "Arrows show direction and one second of movement.\nView: toggle debug menu · View + A: quit game"
@@ -40,16 +50,27 @@ func _ready() -> void:
 	performance_label.add_theme_font_size_override("font_size", 15)
 	rows.add_child(performance_label)
 	rows.add_child(preload("res://performance_graph.gd").new())
-	var lod := CheckBox.new()
-	lod.text = "Nearby traffic simulation (turn off for comparison)"
-	lod.button_pressed = PerformanceDiagnostics.traffic_lod_enabled
-	lod.toggled.connect(func(enabled: bool): PerformanceDiagnostics.traffic_lod_enabled = enabled)
-	rows.add_child(lod)
-	var snapshots := CheckBox.new()
-	snapshots.text = "Optimized multiplayer snapshots (host comparison)"
-	snapshots.button_pressed = PerformanceDiagnostics.optimized_snapshots
-	snapshots.toggled.connect(func(enabled: bool): PerformanceDiagnostics.optimized_snapshots = enabled)
-	rows.add_child(snapshots)
+	var baseline_title := Label.new()
+	baseline_title.text = "Baseline features  -  checked means enabled"
+	rows.add_child(baseline_title)
+	all_baseline = CheckBox.new()
+	all_baseline.name = "AllBaseline"
+	all_baseline.text = "All baseline features"
+	all_baseline.toggled.connect(set_all_baseline)
+	rows.add_child(all_baseline)
+	for label in BASELINE_PROPERTIES:
+		add_baseline_option(rows, label, BASELINE_PROPERTIES[label], false)
+	for key in preload("res://debug_render_filters.gd").OPTIONS:
+		add_baseline_option(rows, preload("res://debug_render_filters.gd").OPTIONS[key], key, true)
+	var comparison_title := Label.new()
+	comparison_title.text = "Optional performance comparisons  -  may reduce FPS"
+	rows.add_child(comparison_title)
+	for label in COMPARISON_PROPERTIES:
+		var option := CheckBox.new()
+		option.text = label
+		option.toggled.connect(set_comparison.bind(COMPARISON_PROPERTIES[label]))
+		comparison_options[COMPARISON_PROPERTIES[label]] = option
+		rows.add_child(option)
 	var capture_button := Button.new()
 	capture_button.text = "Capture frame timings for 20 seconds"
 	capture_button.pressed.connect(func():
@@ -60,6 +81,10 @@ func _ready() -> void:
 	folder.text = "Open performance captures"
 	folder.pressed.connect(func(): OS.shell_open(ProjectSettings.globalize_path("user://performance")))
 	rows.add_child(folder)
+	var close := Button.new()
+	close.text = "Close debug menu"
+	close.pressed.connect(panel.hide)
+	rows.add_child(close)
 	panel.hide()
 	arrows = MeshInstance3D.new()
 	arrows.name = "TrafficMotionVectors"
@@ -69,6 +94,7 @@ func _ready() -> void:
 	material.albedo_color = Color("38e6ff")
 	arrows.material_override = material
 	add_child(arrows)
+	sync_options.call_deferred()
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventJoypadButton and handle_controller_button(event):
@@ -77,6 +103,52 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.physical_keycode == KEY_F3 and event.pressed and not event.echo:
 		panel.visible = not panel.visible
 		get_viewport().set_input_as_handled()
+
+func open_menu() -> void:
+	panel.show()
+	sync_options()
+	all_baseline.grab_focus()
+
+func add_baseline_option(rows: VBoxContainer, label: String, key: String, render_feature: bool) -> void:
+	var option := CheckBox.new()
+	option.text = label
+	option.toggled.connect(set_baseline.bind(key, render_feature))
+	baseline_options[key] = {"checkbox": option, "render": render_feature}
+	rows.add_child(option)
+
+func set_baseline(enabled: bool, key: String, render_feature: bool) -> void:
+	if render_feature:
+		PerformanceDiagnostics.render_filters.set_disabled(key, not enabled)
+	else:
+		PerformanceDiagnostics.set(key, not enabled if key == "buildings_as_blocks" else enabled)
+	sync_options()
+
+func set_all_baseline(enabled: bool) -> void:
+	for key in baseline_options:
+		set_baseline(enabled, key, baseline_options[key].render)
+	sync_options()
+
+func set_comparison(enabled: bool, property: String) -> void:
+	PerformanceDiagnostics.set(property, not enabled)
+	sync_options()
+
+func sync_options() -> void:
+	if PerformanceDiagnostics.render_filters == null: return
+	var enabled_count := 0
+	for key in baseline_options:
+		var entry: Dictionary = baseline_options[key]
+		var enabled: bool
+		if entry.render:
+			enabled = not PerformanceDiagnostics.render_filters.disabled.get(key, false)
+		else:
+			enabled = bool(PerformanceDiagnostics.get(key))
+			if key == "buildings_as_blocks": enabled = not enabled
+		entry.checkbox.set_pressed_no_signal(enabled)
+		if enabled: enabled_count += 1
+	all_baseline.set_pressed_no_signal(enabled_count == baseline_options.size())
+	all_baseline.text = "All baseline features (%d/%d enabled)" % [enabled_count, baseline_options.size()]
+	for key in comparison_options:
+		comparison_options[key].set_pressed_no_signal(not bool(PerformanceDiagnostics.get(key)))
 
 func is_view_held(device: int) -> bool:
 	return controller_buttons.get(device, {}).get(JOY_BUTTON_BACK, false) or Input.is_joy_button_pressed(device, JOY_BUTTON_BACK)
@@ -112,12 +184,13 @@ func controller_connection_changed(device: int, _connected: bool) -> void:
 	view_chords.erase(device)
 
 func _process(delta: float) -> void:
+	if panel.visible: sync_options()
 	performance_refresh -= delta
 	if panel.visible and performance_refresh <= 0.0:
 		performance_refresh = 0.5
 		PerformanceDiagnostics.refresh_traffic_counts()
 		performance_label.text = PerformanceDiagnostics.summary()
-	hide_ui.set_pressed_no_signal(ScreenshotCapture.screenshot_mode)
+	hide_ui.set_pressed_no_signal(not ScreenshotCapture.screenshot_mode)
 	arrows.visible = vectors_enabled
 	refresh -= delta
 	if vectors_enabled and refresh <= 0.0:

@@ -45,7 +45,8 @@ offset_top = 88.0
 offset_right = 24.0
 offset_bottom = 88.0
 theme_override_font_sizes/font_size = 16
-text = "RT: forward   LT: reverse   B / X: brake
+text = "LS up/down: D/R   RT: gas   LT: brake   L3: horn
+LS X: steer   Reverse: automatic rear view; flick RS forward: front view
 A: kitchen / select   Y: reset / tow
 Start / Esc: pause   View / Tab: options"
 

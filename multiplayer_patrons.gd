@@ -3,6 +3,7 @@ extends "res://patron_manager.gd"
 var pad_owners: Dictionary = {}
 
 func _process(delta: float) -> void:
+	if not PerformanceDiagnostics.pedestrian_logic_enabled: return
 	if level.lobby_world: return
 	if not NetworkSession.active or not multiplayer.is_server() or level.trucks.is_empty(): return
 	if not NetworkSession.world_ready(): return
@@ -11,23 +12,23 @@ func _process(delta: float) -> void:
 	ids.sort()
 	var available: Dictionary = {}
 	for pad in level.get_node("ParkingPads").get_children():
-		var owner: int = pad_owners.get(pad, 0)
-		var candidates: Array = [owner] if ids.has(owner) else []
+		var player_id: int = pad_owners.get(pad, 0)
+		var candidates: Array = [player_id] if ids.has(player_id) else []
 		for id in ids:
-			if id != owner: candidates.append(id)
-		owner = 0
+			if id != player_id: candidates.append(id)
+		player_id = 0
 		for id in candidates:
-			var previous: int = level.select_player(id)
+			var previous_candidate: int = level.select_player(id)
 			var body: CharacterBody3D = level.truck
 			var open_here: bool = not level.round_finished and pad != level.repair_pad and pad.contains_truck(body) and body.parking_pad == pad and body.deployed and body.opening > 0.99 and absf(body.speed) < 0.5 and body.health > 0.0
-			if open_here: owner = id
-			level.select_player(previous)
-			if owner != 0: break
-		pad_owners[pad] = owner
-		var previous: int = level.select_player(owner if owner != 0 else level.local_player)
-		pad.tick_service(delta, owner != 0 and level.has_ingredients(), owner != 0)
-		if owner != 0 and not pad.expired and level.has_ingredients(): available[pad] = owner
-		if pad.has_node("WorldMeter"): pad.get_node("WorldMeter").visible = owner == 0
+			if open_here: player_id = id
+			level.select_player(previous_candidate)
+			if player_id != 0: break
+		pad_owners[pad] = player_id
+		var previous: int = level.select_player(player_id if player_id != 0 else level.local_player)
+		pad.tick_service(delta, player_id != 0 and level.has_ingredients(), player_id != 0)
+		if player_id != 0 and not pad.expired and level.has_ingredients(): available[pad] = player_id
+		if pad.has_node("WorldMeter"): pad.get_node("WorldMeter").visible = player_id == 0
 		level.select_player(previous)
 	for patron in level.get_node("Patrons").get_children():
 		if patron.pad != null and (not available.has(patron.pad) or available[patron.pad] != patron.get_meta("player_id", 0)):

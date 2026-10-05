@@ -17,4 +17,7 @@ tools/rigged_cars/*.blend
 *.log
 Street_Kitchen_Windows/
 build/
+android/build/
+android/.build_version
 dist/
+game.gd.before_cockpit

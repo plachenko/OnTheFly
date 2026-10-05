@@ -8,6 +8,7 @@ static func area(points: PackedVector2Array) -> float:
 
 static func pieces(city: Node3D, center: Vector2) -> Array[PackedVector2Array]:
 	var result: Array[PackedVector2Array] = []
+	if not city.topology.primary(center): return result
 	for raw in Layout.remaining(city.rounded_block_contour(center), Layout.road_masks(city, 0.45)):
 		if area(raw) < 30: continue
 		# Round the new diagonal corners as well as the original block corners.
@@ -34,26 +35,52 @@ static func make_block(city: Node3D, center: Vector2, material: Material) -> voi
 	edge.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for polygon in shapes:
 		Layout.emit_polygon(city, top, polygon, city.sidewalk_height, Vector3.ZERO)
+		var signed_area := 0.0
+		for i in polygon.size(): signed_area += polygon[i].cross(polygon[(i + 1) % polygon.size()])
 		for i in polygon.size():
 			var a := polygon[i]
 			var b := polygon[(i + 1) % polygon.size()]
 			var direction := (b - a).normalized()
-			var inward := Vector2(-direction.y, direction.x) * 0.18
+			var inward := Vector2(-direction.y, direction.x) * (0.28 if signed_area > 0.0 else -0.28)
 			Layout.emit_polygon(city, edge, PackedVector2Array([a, b, b + inward, a + inward]), city.sidewalk_height + 0.015, Vector3.ZERO, false)
-			var ah: float = city.terrain_surface_height_at(a.x, a.y)
-			var bh: float = city.terrain_surface_height_at(b.x, b.y)
-			var high_a := Vector3(a.x, ah + city.sidewalk_height, a.y)
-			var high_b := Vector3(b.x, bh + city.sidewalk_height, b.y)
-			var low_a := Vector3(a.x, ah + 0.06, a.y)
-			var low_b := Vector3(b.x, bh + 0.06, b.y)
-			for vertex in [high_a, high_b, low_a, high_b, low_b, low_a]: sides.add_vertex(vertex)
+			emit_curb_faces(city, sides, a, b)
 	var slab := add_mesh(city.get_node("Roads"), "RoundedSidewalk", top, material, true)
 	slab.set_meta("island_shapes", shapes)
 	var curb_material := StandardMaterial3D.new()
 	curb_material.albedo_color = Color("ede5cb")
 	curb_material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	add_mesh(city.get_node("Roads"), "IslandCurbFaces", sides, curb_material, false)
-	add_mesh(city.get_node("Roads"), "IslandCurbOutline", edge, curb_material, false)
+	var paint := StandardMaterial3D.new()
+	paint.albedo_color = Color("d90e0b")
+	paint.cull_mode = BaseMaterial3D.CULL_DISABLED
+	add_mesh(city.get_node("Roads"), "IslandCurbOutline", edge, paint, false)
+
+static func emit_curb_faces(city: Node3D, tool: SurfaceTool, a: Vector2, b: Vector2) -> void:
+	# A long diagonal edge must follow every terrain triangle, like the slab top.
+	# Split at grid lines AND the triangle diagonals to avoid angle-dependent gaps.
+	var step: float = city.terrain_size / maxi(8, roundi(city.terrain_size / city.terrain_step))
+	var origin: float = -city.terrain_size * 0.5
+	var cuts: Array[float] = [0.0, 1.0]
+	for coordinate in [0, 1, 2]:
+		var start: float = a[coordinate] if coordinate < 2 else a.x + a.y
+		var finish: float = b[coordinate] if coordinate < 2 else b.x + b.y
+		if absf(finish - start) < 0.00001: continue
+		var base := origin if coordinate < 2 else origin * 2.0
+		for line in range(ceili((minf(start, finish) - base) / step), floori((maxf(start, finish) - base) / step) + 1):
+			var fraction := (base + line * step - start) / (finish - start)
+			if fraction > 0.00001 and fraction < 0.99999: cuts.append(fraction)
+	cuts.sort()
+	for index in range(cuts.size() - 1):
+		var p := a.lerp(b, cuts[index])
+		var q := a.lerp(b, cuts[index + 1])
+		if p.distance_squared_to(q) < 0.000001: continue
+		var ph: float = city.terrain_surface_height_at(p.x, p.y)
+		var qh: float = city.terrain_surface_height_at(q.x, q.y)
+		var high_p := Vector3(p.x, ph + city.sidewalk_height, p.y)
+		var high_q := Vector3(q.x, qh + city.sidewalk_height, q.y)
+		var low_p := Vector3(p.x, ph + 0.06, p.y)
+		var low_q := Vector3(q.x, qh + 0.06, q.y)
+		for vertex in [high_p, high_q, low_p, high_q, low_q, low_p]: tool.add_vertex(vertex)
 
 static func add_mesh(parent: Node3D, title: String, tool: SurfaceTool, material: Material, collision: bool) -> MeshInstance3D:
 	tool.generate_normals()
@@ -86,14 +113,14 @@ static func crosswalks(city: Node3D) -> void:
 			var best := Vector2.ZERO
 			var best_length := 0.0
 			for i in polygon.size():
-				var a := polygon[i]
-				var b := polygon[(i + 1) % polygon.size()]
-				var midpoint := (a + b) * 0.5
+				var edge_start := polygon[i]
+				var edge_end := polygon[(i + 1) % polygon.size()]
+				var midpoint := (edge_start + edge_end) * 0.5
 				var foot := Geometry2D.get_closest_point_to_segment(midpoint, start, finish)
 				if absf(midpoint.distance_to(foot) - (city.diagonal_road_width * 0.5 + 0.45)) > 0.5: continue
 				if city.on_grid_road(foot, 4.5): continue
-				if a.distance_to(b) > best_length:
-					best_length = a.distance_to(b)
+				if edge_start.distance_to(edge_end) > best_length:
+					best_length = edge_start.distance_to(edge_end)
 					best = foot
 			if best_length < 3: continue
 			var duplicate := false

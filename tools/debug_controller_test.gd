@@ -6,7 +6,7 @@ func _initialize() -> void:
 func button(index: int, pressed: bool, device: int = 0) -> InputEventJoypadButton:
 	var event := InputEventJoypadButton.new()
 	event.device = device
-	event.button_index = index
+	event.button_index = index as JoyButton
 	event.pressed = pressed
 	return event
 

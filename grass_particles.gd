@@ -65,6 +65,7 @@ static func add_clumps(city: Node3D, mesh: Mesh, points: PackedVector3Array, ran
 	instances.mesh = mesh
 	instances.instance_count = points.size()
 	for index in points.size():
+		await city.loading_checkpoint()
 		var scale := random.randf_range(0.85, 1.3)
 		instances.set_instance_transform(index, Transform3D(Basis(Vector3.UP, random.randf() * TAU).scaled(Vector3.ONE * scale), points[index]))
 		instances.set_instance_color(index, Color(0.19, 0.34, 0.09).lerp(Color(0.38, 0.54, 0.16), random.randf()))
@@ -81,7 +82,7 @@ static func available(city: Node3D, point: Vector2, park: bool, occupied: Array[
 	if city.distance_to_diagonal_road(point) < city.diagonal_road_width * 0.5 + city.sidewalk_width + margin:
 		return false
 	if park:
-		for center in city.park_block_centers:
+		for center in city.topology.park_cells():
 			if absf(point.x - center.x) < 0.9 or absf(point.y - center.y) < 0.9:
 				if absf(point.x - center.x) < 21 and absf(point.y - center.y) < 21:
 					return false
@@ -95,29 +96,36 @@ static func generate(city: Node3D, density: float) -> void:
 	random.seed = city.actual_seed + 7103
 	var occupied: Array[Rect2] = []
 	for at in city.lamp_gravel_points:
+		await city.loading_checkpoint()
 		occupied.append(Rect2(at - Vector2.ONE * 1.25, Vector2.ONE * 2.5))
 	for building in city.get_node("Buildings").get_children():
+		await city.loading_checkpoint()
 		if not building is StaticBody3D:
 			continue
 		for child in building.get_children():
+			await city.loading_checkpoint()
 			if child is CollisionShape3D and child.shape is BoxShape3D:
 				var half: Vector3 = child.shape.size * 0.5
 				var extent: Vector3 = child.global_basis.x.abs() * half.x + child.global_basis.z.abs() * half.z
 				var size := Vector2(extent.x, extent.z) + Vector2.ONE * 0.6
 				occupied.append(Rect2(Vector2(child.global_position.x, child.global_position.z) - size, size * 2.0))
 	var mesh := blade_mesh()
-	var fringe := fringe_mesh()
+	var fringe: ArrayMesh = await city.loading_job(fringe_mesh)
 	var patches: Array = []
 	for plot in city.get_node("Parks").get_children():
+		await city.loading_checkpoint()
 		for visual in plot.get_children():
+			await city.loading_checkpoint()
 			if visual is MeshInstance3D and str(visual.name) in ["Grass", "ParkGrass"]:
 				patches.append(visual)
 	for visual in patches:
-		var island: bool = str(visual.get_parent().name).begins_with("DiagonalGrassPlot")
+		await city.loading_checkpoint()
+		var island: bool = city.topology.planned or str(visual.get_parent().name).begins_with("DiagonalGrassPlot")
 		var bounds: AABB = visual.mesh.get_aabb()
 		var count := mini(6000, int(bounds.size.x * bounds.size.z * density * 2.5))
 		var points := PackedVector3Array()
 		for index in count:
+			await city.loading_checkpoint()
 			var local := Vector3(random.randf_range(bounds.position.x, bounds.end.x), 0, random.randf_range(bounds.position.z, bounds.end.z))
 			var world: Vector3 = visual.to_global(local)
 			var point := Vector2(world.x, world.z)
@@ -125,13 +133,15 @@ static func generate(city: Node3D, density: float) -> void:
 				continue
 			world.y = city.terrain_surface_height_at(point.x, point.y) + (city.sidewalk_height + 0.035 if island else 0.065)
 			points.append(world)
-		add_clumps(city, mesh, points, random, "GrassClumps_" + str(visual.get_parent().name))
+		await add_clumps(city, mesh, points, random, "GrassClumps_" + str(visual.get_parent().name))
 		var edge_points := PackedVector3Array()
 		# Sample the grass side of both grid and diagonal sidewalks, never the pavement.
 		var x := bounds.position.x
 		while x < bounds.end.x:
+			await city.loading_checkpoint()
 			var z := bounds.position.z
 			while z < bounds.end.z:
+				await city.loading_checkpoint()
 				var world: Vector3 = visual.to_global(Vector3(x, 0, z))
 				var point := Vector2(world.x, world.z)
 				var near_grid: bool = city.on_grid_road(point, city.sidewalk_width + 0.7)
@@ -141,4 +151,4 @@ static func generate(city: Node3D, density: float) -> void:
 					edge_points.append(world)
 				z += 0.45
 			x += 0.45
-		add_clumps(city, fringe, edge_points, random, "GrassFringe_" + str(visual.get_parent().name))
+		await add_clumps(city, fringe, edge_points, random, "GrassFringe_" + str(visual.get_parent().name))

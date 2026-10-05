@@ -10,6 +10,7 @@ script = ExtResource("2")
 [node name="ProceduralCity" parent="."]
 randomize_each_load = false
 fixed_seed = 12054
+use_bundled_seed = true
 
 [node name="PatronManager" parent="."]
 script = ExtResource("3")

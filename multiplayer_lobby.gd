@@ -2,6 +2,8 @@ extends Control
 
 var players: VBoxContainer
 var level_picker: OptionButton
+var grid_toggle: CheckButton
+var size_picker: OptionButton
 var color_picker: OptionButton
 var ready_button: CheckButton
 var start_button: Button
@@ -11,6 +13,7 @@ var world: Node
 var previous_ready := false
 var readiness_initialized := false
 var resume_button: Button
+var share_button: Button
 
 func _ready() -> void:
 	var background := ColorRect.new()
@@ -39,12 +42,21 @@ func _ready() -> void:
 	var options := HBoxContainer.new()
 	rows.add_child(options)
 	level_picker = OptionButton.new()
-	for name in NetworkSession.LEVELS: level_picker.add_item(name)
+	for item_name in NetworkSession.LEVELS: level_picker.add_item(item_name)
 	level_picker.custom_minimum_size.x = 220
 	level_picker.item_selected.connect(func(index: int): NetworkSession.choose_level(level_picker.get_item_text(index)))
 	options.add_child(level_picker)
+	size_picker = OptionButton.new()
+	size_picker.add_item("Small city",0)
+	size_picker.add_item("Large city",1)
+	size_picker.item_selected.connect(NetworkSession.choose_city_size)
+	options.add_child(size_picker)
+	grid_toggle = CheckButton.new()
+	grid_toggle.text = "Original grid"
+	grid_toggle.toggled.connect(NetworkSession.choose_original_grid)
+	rows.add_child(grid_toggle)
 	color_picker = OptionButton.new()
-	for name in ["Red truck", "Blue truck", "Green truck", "Yellow truck", "Purple truck", "White truck"]: color_picker.add_item(name)
+	for item_name in ["Red truck", "Blue truck", "Green truck", "Yellow truck", "Purple truck", "White truck"]: color_picker.add_item(item_name)
 	color_picker.custom_minimum_size.x = 180
 	color_picker.item_selected.connect(func(_index: int): send_options())
 	options.add_child(color_picker)
@@ -74,6 +86,10 @@ func _ready() -> void:
 	start_button.text = "Start Session"
 	start_button.pressed.connect(func(): NetworkSession.start_session())
 	actions.add_child(start_button)
+	share_button = Button.new()
+	share_button.text = "Share lobby QR"
+	actions.add_child(share_button)
+	share_button.pressed.connect(show_lobby_qr)
 	resume_button = Button.new()
 	resume_button.text = "Drive lobby"
 	resume_button.pressed.connect(func(): hide())
@@ -123,9 +139,16 @@ func refresh() -> void:
 		child.queue_free()
 	var host := multiplayer.is_server()
 	start_button.visible = host
+	share_button.visible = host
 	start_button.disabled = not NetworkSession.can_start()
 	ready_button.visible = not host
 	level_picker.disabled = not host
+	grid_toggle.disabled = not host
+	grid_toggle.set_pressed_no_signal(NetworkSession.original_grid)
+	grid_toggle.visible = NetworkSession.selected_level == "Hilly City"
+	size_picker.disabled = not host
+	size_picker.select(NetworkSession.city_size)
+	size_picker.visible = NetworkSession.selected_level == "Hilly City"
 	for index in level_picker.item_count:
 		if level_picker.get_item_text(index) == NetworkSession.selected_level: level_picker.select(index)
 	var local_id := multiplayer.get_unique_id()
@@ -155,3 +178,10 @@ func refresh() -> void:
 		swatch.custom_minimum_size = Vector2(34, 22)
 		row.add_child(swatch)
 	hint.text = "Drive the lobby while guests get ready. Only you can start the session." if host else "Ready lets you drive the lobby. Unready brings this menu back."
+
+func show_lobby_qr() -> void:
+	var dialog := preload("res://lobby_share_dialog.gd").new()
+	add_child(dialog)
+	dialog.visibility_changed.connect(func():
+		if not dialog.visible: dialog.queue_free())
+	dialog.popup_centered()

@@ -26,46 +26,46 @@ func run() -> void:
 		for ramp in [false, true]:
 			scene.selected_model = model_index
 			scene.reset_car()
-			var car = scene.car
-			car.set_physics_process(false)
-			car.position = Vector3(12, 4, -12) if ramp else Vector3(0, 0.15, 10)
+			var branch_car = scene.car
+			branch_car.set_physics_process(false)
+			branch_car.position = Vector3(12, 4, -12) if ramp else Vector3(0, 0.15, 10)
 			await physics_frame
-			car.spin_rng.seed = 8
-			car.receive_impact(Vector3.RIGHT * 3, Vector3.RIGHT)
-			var root_start: Vector3 = car.position
+			branch_car.spin_rng.seed = 8
+			branch_car.receive_impact(Vector3.RIGHT * 3, Vector3.RIGHT)
+			var root_start: Vector3 = branch_car.position
 			for tick in 180:
 				if tick % 12 == 0:
-					car.receive_impact(Vector3.RIGHT * 3, Vector3.RIGHT)
-				car._physics_process(1.0 / 60.0)
-				assert(car.state == car.State.REACTION and absf(car.pose.z) <= car.light_tip_cap)
-				assert(car.rollover_energy == 0 and car.position.is_equal_approx(root_start))
-				check_contacts(car)
+					branch_car.receive_impact(Vector3.RIGHT * 3, Vector3.RIGHT)
+				branch_car._physics_process(1.0 / 60.0)
+				assert(branch_car.state == branch_car.State.REACTION and absf(branch_car.pose.z) <= branch_car.light_tip_cap)
+				assert(branch_car.rollover_energy == 0 and branch_car.position.is_equal_approx(root_start))
+				check_contacts(branch_car)
 			for tick in 360:
-				car._physics_process(1.0 / 60.0)
-			assert(car.state == car.State.DRIVING, "Repeated light tips must recover")
-			car.tire_friction = 0.3
-			car.receive_impact(Vector3.LEFT * 5, Vector3.LEFT)
-			assert(car.medium_tip_target > 0 and car.medium_tip_target < deg_to_rad(30))
+				branch_car._physics_process(1.0 / 60.0)
+			assert(branch_car.state == branch_car.State.DRIVING, "Repeated light tips must recover")
+			branch_car.tire_friction = 0.3
+			branch_car.receive_impact(Vector3.LEFT * 5, Vector3.LEFT)
+			assert(branch_car.medium_tip_target > 0 and branch_car.medium_tip_target < deg_to_rad(30))
 			for tick in 420:
-				car._physics_process(1.0 / 60.0)
-				if car.contact_locked:
-					check_contacts(car)
-			assert(car.state == car.State.DRIVING, "Moderate stable tip must recover")
-			car.tire_friction = 1.0
-			car.receive_impact(Vector3.RIGHT * 11.8, Vector3.RIGHT)
-			assert(car.medium_tip_target < 0)
+				branch_car._physics_process(1.0 / 60.0)
+				if branch_car.contact_locked:
+					check_contacts(branch_car)
+			assert(branch_car.state == branch_car.State.DRIVING, "Moderate stable tip must recover")
+			branch_car.tire_friction = 1.0
+			branch_car.receive_impact(Vector3.RIGHT * 11.8, Vector3.RIGHT)
+			assert(branch_car.medium_tip_target < 0)
 			for tick in 240:
-				car._physics_process(1.0 / 60.0)
-				check_contacts(car)
-			assert(car.state == car.State.DISABLED and car.explosion_count == 0)
-			assert(absf(car.pose.z) > deg_to_rad(89))
-			var disabled_position: Vector3 = car.position
-			car.throttle = 1.0
-			car.steering = 1.0
-			car.receive_impact(Vector3.LEFT * 30, Vector3.LEFT)
+				branch_car._physics_process(1.0 / 60.0)
+				check_contacts(branch_car)
+			assert(branch_car.state == branch_car.State.DISABLED and branch_car.explosion_count == 0)
+			assert(absf(branch_car.pose.z) > deg_to_rad(89))
+			var disabled_position: Vector3 = branch_car.position
+			branch_car.throttle = 1.0
+			branch_car.steering = 1.0
+			branch_car.receive_impact(Vector3.LEFT * 30, Vector3.LEFT)
 			for tick in 60:
-				car._physics_process(1.0 / 60.0)
-			assert(car.position.is_equal_approx(disabled_position) and car.speed == 0 and car.state == car.State.DISABLED)
+				branch_car._physics_process(1.0 / 60.0)
+			assert(branch_car.position.is_equal_approx(disabled_position) and branch_car.speed == 0 and branch_car.state == branch_car.State.DISABLED)
 	# Grip and cross-slope bias change tipping resistance/target without changing signs.
 	scene.reset_car()
 	var car = scene.car

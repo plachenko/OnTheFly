@@ -290,7 +290,7 @@ func spawn_batch() -> void:
 			collider.shape = shape
 			collider.position = bounds.get_center() + Vector3.UP * item.position.y
 			container.add_child(collider)
-		container.position = origin + Vector3((item_index % columns - (columns - 1) * 0.5) * spacing, 1.5 if mode == 3 else 0, (floorf(float(item_index) / columns) - (ceili(float(count) / columns) - 1) * 0.5) * spacing)
+		container.position = origin + Vector3((item_index % columns - (columns - 1) * 0.5) * spacing, 1.5 if mode == 3 else 0.0, (floorf(float(item_index) / columns) - (ceili(float(count) / columns) - 1) * 0.5) * spacing)
 		instances.add_child(container)
 		var duration := Time.get_ticks_usec() - started
 		last_spawn_ms += duration / 1000.0
@@ -308,8 +308,8 @@ func prepare_item(node: Node, mode: int, run_scripts: bool) -> void:
 		if node is RigidBody3D: node.freeze = true
 	for child in node.get_children(): prepare_item(child, mode, run_scripts)
 
-func mesh_bounds(node: Node, transform: Transform3D = Transform3D.IDENTITY) -> AABB:
-	var here: Transform3D = transform * node.transform if node is Node3D else transform
+func mesh_bounds(node: Node, placement: Transform3D = Transform3D.IDENTITY) -> AABB:
+	var here: Transform3D = placement * node.transform if node is Node3D else placement
 	var bounds := AABB()
 	var found := false
 	if node is MeshInstance3D and node.mesh != null:

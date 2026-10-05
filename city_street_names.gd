@@ -33,6 +33,7 @@ static func plate(parent: Node3D, text: String, angle: float, height: float) -> 
 		arm.add_child(label)
 
 static func add_sign(city: Node3D, point: Vector2, first: String, second: String, angle: float = PI * 0.5) -> void:
+	if not city.furniture_on_sidewalk(point): return
 	var post := Node3D.new()
 	post.name = "StreetName_%d_%d" % [roundi(point.x), roundi(point.y)]
 	post.position = Vector3(point.x, city.height_at(point.x, point.y), point.y)
@@ -57,16 +58,19 @@ static func generate(city: Node3D) -> void:
 	var names := {"avenues": {}, "streets": {}, "diagonals": {}}
 	var corner: float = city.road_width * 0.5 + city.sidewalk_width * 0.65
 	for x in range(-128, 129, 64):
-		var avenue: String = AVENUES[(x + 128) / 64]
+		await city.loading_checkpoint()
+		var avenue: String = AVENUES[floori(float(x + 128) / 64.0)]
 		names.avenues[x] = avenue
 		for z in range(-144, 177, 64):
-			var street: String = STREETS[(z + 144) / 64]
+			await city.loading_checkpoint()
+			var street: String = STREETS[floori(float(z + 144) / 64.0)]
 			names.streets[z] = street
-			var point := Vector2(x + corner + preload("res://city_road_rules.gd").extra_width(true, x, 1), z + corner + preload("res://city_road_rules.gd").extra_width(false, z, 1))
+			var point := Vector2(x + corner + preload("res://city_road_rules.gd").extra_width(true, x, 1, city), z + corner + preload("res://city_road_rules.gd").extra_width(false, z, 1, city))
 			if city.distance_to_diagonal_road(point) >= city.diagonal_road_width * 0.5 + 0.5:
 				add_sign(city, point, avenue, street)
 	if city.diagonal_roads_enabled:
 		for index in city.diagonal_road_segments.size():
+			await city.loading_checkpoint()
 			var segment: Vector4 = city.diagonal_road_segments[index]
 			var start := Vector2(segment.x, segment.y)
 			var end := Vector2(segment.z, segment.w)
@@ -75,10 +79,12 @@ static func generate(city: Node3D) -> void:
 			names.diagonals[index] = diagonal
 			# Place a pair of street names at each diagonal/grid junction.
 			for axis in 2:
+				await city.loading_checkpoint()
 				var delta: float = end[axis] - start[axis]
 				if absf(delta) < 0.001:
 					continue
 				for coordinate in (names.avenues if axis == 0 else names.streets):
+					await city.loading_checkpoint()
 					var t: float = (float(coordinate) - start[axis]) / delta
 					if t < 0.0 or t > 1.0:
 						continue
@@ -88,6 +94,7 @@ static func generate(city: Node3D) -> void:
 					var best := INF
 					var chosen := point
 					for sample in 32:
+						await city.loading_checkpoint()
 						var candidate := junction + Vector2.from_angle(float(sample) * TAU / 32.0) * corner * 1.6
 						if city.on_grid_road(candidate, 0.8) or city.distance_to_diagonal_road(candidate) < city.diagonal_road_width * 0.5 + 0.8:
 							continue
@@ -101,3 +108,4 @@ static func generate(city: Node3D) -> void:
 					var cross_name: String = names.avenues[coordinate] if axis == 0 else names.streets[coordinate]
 					add_sign(city, point, diagonal, cross_name, atan2(-direction.y, direction.x))
 	city.set_meta("street_names", names)
+

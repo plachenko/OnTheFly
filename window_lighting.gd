@@ -24,7 +24,7 @@ func detect(mesh: Mesh, texture: Texture2D, surface: int) -> Dictionary:
 	var parents: Array[int] = []
 	var triangles: Array[int] = []
 	var shared: Dictionary = {}
-	for triangle in indices.size() / 3:
+	for triangle in floori(float(indices.size()) / 3.0):
 		var a := indices[triangle * 3]
 		var b := indices[triangle * 3 + 1]
 		var c := indices[triangle * 3 + 2]
@@ -108,7 +108,7 @@ func apply(model: Node3D, rng: RandomNumberGenerator, chance: float, streamer_ch
 		var indices: PackedInt32Array = record.data.indices
 		for index in indices.size():
 			var vertex := indices[index]
-			tool.set_color(record.lit_triangles.get(index / 3, Color.BLACK))
+			tool.set_color(record.lit_triangles.get(floori(float(index) / 3.0), Color.BLACK))
 			if arrays[Mesh.ARRAY_NORMAL] != null:
 				tool.set_normal(arrays[Mesh.ARRAY_NORMAL][vertex])
 			if arrays[Mesh.ARRAY_TEX_UV] != null:

@@ -87,6 +87,7 @@ static func connect_poles(city: Node3D, parent: Node3D, from: Node3D, to: Node3D
 		var supports: Array[Node3D] = [from, to]
 		wire.set_script(preload("res://utility_wire.gd"))
 		wire.supports = supports
+		for support in supports: wire.support_paths.append(wire.get_path_to(support))
 
 static func generate(city: Node3D) -> void:
 	var parent := Node3D.new()
@@ -102,19 +103,28 @@ static func generate(city: Node3D) -> void:
 	cable.albedo_color = Color(0.055, 0.055, 0.065)
 	var curb: float = city.road_width * 0.5 + city.sidewalk_width * 0.75
 	for route in 5:
+		await city.loading_checkpoint()
 		var vertical := route < 3
 		var road: float = [-128.0, 0.0, 128.0, -80.0, 48.0][route]
 		var previous: Node3D
 		for index in (10 if vertical else 8):
+			await city.loading_checkpoint()
 			var along := (-128.0 if vertical else -112.0) + index * 32.0
+			if not city.road_segment_exists(vertical,road,along):
+				previous = null
+				continue
 			var side := (-1.0 if index % 2 == 0 else 1.0) if route % 2 == 0 else 1.0
-			var shoulder := curb + preload("res://city_road_rules.gd").extra_width(vertical, road, side)
+			var shoulder := curb + preload("res://city_road_rules.gd").extra_width(vertical, road, side, city)
 			var point := Vector2(road + side * shoulder, along) if vertical else Vector2(along, road + side * shoulder)
+			if not city.furniture_on_sidewalk(point):
+				previous = null
+				continue
 			if city.distance_to_diagonal_road(point) < city.diagonal_road_width * 0.5 + 1.0:
 				previous = null
 				continue
 			var blocked := false
 			for pad in city.get_parent().get_node("ParkingPads").get_children():
+				await city.loading_checkpoint()
 				if Vector2(pad.position.x, pad.position.z).distance_to(point) < 6.0:
 					blocked = true
 			if blocked:
@@ -125,3 +135,4 @@ static func generate(city: Node3D) -> void:
 			if previous != null:
 				connect_poles(city, parent, previous, node, cable)
 			previous = node
+

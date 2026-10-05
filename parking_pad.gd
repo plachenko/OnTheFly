@@ -1,8 +1,8 @@
 @tool
 extends Area3D
 
-@export var kitchen_camera_offset: Vector3 = Vector3(5.3, 2.8, -1.0)
-@export var kitchen_focus_offset: Vector3 = Vector3(-0.35, 2.25, 1.0)
+@export var kitchen_camera_offset: Vector3 = Vector3(9.5, 10.8, 0.1)
+@export var kitchen_focus_offset: Vector3 = Vector3(0.0, 1.5, 0.8)
 @export var camera_transition_speed: float = 2.4
 @export_category("Patron Service")
 @export var serving_enabled: bool = true

@@ -8,6 +8,21 @@ var initialized := false
 var rotation: Array = []
 var used: Dictionary = {}
 var competitive_waves := 0
+@export var traffic_ramp_seconds := 12.0
+var atmosphere_timer := 0.0
+
+func traffic_pressure() -> float:
+	if not initialized: return 0.0
+	if in_service: return 1.0
+	return 1.0 - clampf(remaining / maxf(0.1, traffic_ramp_seconds), 0.0, 1.0)
+
+func tick_atmosphere(delta: float) -> void:
+	atmosphere_timer -= delta
+	if atmosphere_timer > 0.0: return
+	atmosphere_timer = 0.5
+	var city := level.get_node_or_null("ProceduralCity")
+	if city != null and city.has_method("update_feeding_traffic"):
+		city.update_feeding_traffic(traffic_pressure())
 
 func start_wave() -> void:
 	wave += 1
@@ -31,6 +46,7 @@ func tick(delta: float) -> void:
 		initialized = true
 		start_wave()
 	remaining = maxf(0.0, remaining - delta)
+	tick_atmosphere(delta)
 	for pad in rotation:
 		pad.service_remaining = remaining if in_service else 0.0
 		pad.serving_duration = maxf(0.1, level.service_window_seconds)

@@ -7,6 +7,19 @@ var warning_blend: float = 0.0
 var pursuing: bool = false
 var red_blend: float = 0.0
 const YELLOW_HOLD: float = 2.5
+var chase_radius_multiplier := 1.3
+var return_from_center := false
+var return_blend := 1.0
+var return_delay := 0.0
+
+func begin_green_return() -> void:
+	pursuing = false
+	yellow_remaining = 0.0
+	warning_blend = 0.0
+	red_blend = 0.0
+	return_from_center = true
+	return_blend = 0.0
+	return_delay = 1.8
 
 func truck_overlaps() -> bool:
 	var car := get_parent()
@@ -45,7 +58,17 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	var car := get_parent()
 	visible = not car.exploded
-	if truck_overlaps():
+	if pursuing and return_from_center:
+		return_from_center = false
+		return_blend = 1.0
+		return_delay = 0.0
+	if return_from_center:
+		return_delay = maxf(0.0, return_delay - delta)
+		if return_delay <= 0.0:
+			return_blend = minf(1.0, return_blend + delta / 1.2)
+		if return_blend >= 1.0:
+			return_from_center = false
+	elif truck_overlaps():
 		yellow_remaining = YELLOW_HOLD
 	else:
 		yellow_remaining = maxf(0.0, yellow_remaining - delta)
@@ -67,7 +90,8 @@ func update_ring() -> void:
 	for segment in 96:
 		for corner in [Vector2(0, 0), Vector2(1, 0), Vector2(0, 1), Vector2(1, 0), Vector2(1, 1), Vector2(0, 1)]:
 			var angle: float = (float(segment) + corner.x) * TAU / 96.0
-			var distance: float = radius * lerpf(0.5, 1.15, smoothstep(0.0, 1.0, warning_blend)) * lerpf(1.0, 1.3, smoothstep(0.0, 1.0, red_blend)) + (corner.y - 0.5) * 0.16
+			var distance: float = radius * lerpf(0.5, 1.15, smoothstep(0.0, 1.0, warning_blend)) * lerpf(1.0, chase_radius_multiplier, smoothstep(0.0, 1.0, red_blend)) * smoothstep(0.0, 1.0, return_blend) + (corner.y - 0.5) * 0.16
+			distance = maxf(0.0, distance)
 			var point: Vector3 = center + Vector3(cos(angle), 0, sin(angle)) * distance
 			point.y = maxf(city.terrain_surface_height_at(point.x, point.z), city.height_at(point.x, point.z)) + 0.15
 			tool.add_vertex(point)

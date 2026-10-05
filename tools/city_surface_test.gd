@@ -35,6 +35,22 @@ func run() -> void:
 			island_count += slab.get_meta("island_shapes").size()
 			assert(slab.get_child_count() > 0)
 	assert(island_count >= 6)
+	var curb_faces := 0
+	var red_outlines := 0
+	for visual in city.get_node("Roads").get_children():
+		if str(visual.name).begins_with("IslandCurbFaces"):
+			var vertices: PackedVector3Array = visual.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+			var cache := {}
+			for vertex in vertices:
+				var lift: float = vertex.y - preload("res://city_visual_surface.gd").height(city,Vector2(vertex.x,vertex.z),cache)
+				assert(lift >= .055 and lift <= city.sidewalk_height+.01, "Curbs must stay attached to the smoothed sidewalk surface")
+			curb_faces += 1
+		if str(visual.name).begins_with("IslandCurbOutline"):
+			assert(visual.mesh.surface_get_material(0).albedo_color.r > 0.8)
+			assert(visual.mesh.surface_get_material(0).albedo_color.g < 0.1)
+			red_outlines += 1
+	assert(curb_faces > 0 and red_outlines == curb_faces)
+	assert(city.get_node("Roads/CurbMarkings").get_child_count() > 0)
 	var crossings := city.get_node("Crosswalks").find_children("IslandCrosswalk*", "Node3D", false, false)
 	assert(crossings.size() >= 3)
 	for crossing in crossings:
@@ -52,6 +68,7 @@ func run() -> void:
 			var hit := root.world_3d.direct_space_state.intersect_ray(query)
 			assert(not hit.is_empty() and str(hit.collider.get_parent().name).begins_with("CurbRamp"), "Both island ramps must be walkable")
 	for point in [Vector2(0, -50), Vector2(60, -50), Vector2(50, -80), Vector2(96, -80)]:
+		if not city.on_grid_road(point): continue
 		var query := PhysicsRayQueryParameters3D.create(Vector3(point.x, 1000, point.y), Vector3(point.x, -100, point.y), 1)
 		var hit := root.world_3d.direct_space_state.intersect_ray(query)
 		assert(not hit.is_empty())

@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "angles": 12,
+  "elevations": [
+    0,
+    25,
+    50
+  ],
+  "frames": 8,
+  "cell": [
+    256,
+    192
+  ],
+  "world_height": 9.8,
+  "center": [
+    0.6799999475479126,
+    1.4199997186660767,
+    0.20500004291534424
+  ],
+  "states": {
+    "idle": {
+      "duration": 0.6666666666666666,
+      "loop": true,
+      "atlas": "res://assets/truck_billboards/idle.png",
+      "normals": "res://assets/truck_billboards/idle_normals.png"
+    },
+    "drive": {
+      "duration": 0.6666666666666666,
+      "loop": true,
+      "atlas": "res://assets/truck_billboards/drive.png",
+      "normals": "res://assets/truck_billboards/drive_normals.png"
+    },
+    "accelerate": {
+      "duration": 0.6666666666666666,
+      "loop": false,
+      "atlas": "res://assets/truck_billboards/accelerate.png",
+      "normals": "res://assets/truck_billboards/accelerate_normals.png"
+    },
+    "brake": {
+      "duration": 0.6666666666666666,
+      "loop": false,
+      "atlas": "res://assets/truck_billboards/brake.png",
+      "normals": "res://assets/truck_billboards/brake_normals.png"
+    },
+    "lean_left": {
+      "duration": 0.6666666666666666,
+      "loop": false,
+      "atlas": "res://assets/truck_billboards/lean_left.png",
+      "normals": "res://assets/truck_billboards/lean_left_normals.png"
+    },
+    "lean_right": {
+      "duration": 0.6666666666666666,
+      "loop": false,
+      "atlas": "res://assets/truck_billboards/lean_right.png",
+      "normals": "res://assets/truck_billboards/lean_right_normals.png"
+    },
+    "donut": {
+      "duration": 0.6666666666666666,
+      "loop": true,
+      "atlas": "res://assets/truck_billboards/donut.png",
+      "normals": "res://assets/truck_billboards/donut_normals.png"
+    },
+    "stop": {
+      "duration": 0.6666666666666666,
+      "loop": false,
+      "atlas": "res://assets/truck_billboards/stop.png",
+      "normals": "res://assets/truck_billboards/stop_normals.png"
+    }
+  }
+}

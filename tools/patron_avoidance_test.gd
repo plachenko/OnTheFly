@@ -41,8 +41,8 @@ func run() -> void:
 	truck.velocity = Vector3.ZERO
 	first.check_dodge()
 	assert(first.dodge_count == 0)
-	assert(first.get_node("VisualVariants").scale == Vector3.ONE * 1.2)
-	assert(is_equal_approx(first.get_node("CollisionShape3D").shape.height, 1.98))
+	assert(first.billboard_visual and first.find_children("*", "Skeleton3D", true, false).is_empty())
+	assert(is_equal_approx(first.get_node("CollisionShape3D").shape.height, 1.98 * first.height_scale))
 	# Destination weighting adds progress without crossing the truck's path.
 	var destination: Vector3 = first.global_position + Vector3(0, 0, 20)
 	var averages: Array[float] = []

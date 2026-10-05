@@ -32,8 +32,8 @@ static func segments(city: Node3D, bay: Node3D, vertical: bool, width: float, le
 	var across_arm := minf(ACROSS_ARM, width * 0.3)
 	var along_arm := minf(ALONG_ARM, length * 0.15)
 	for end in 2:
-		var sign := -1.0 if end == 0 else 1.0
-		var along := sign * length * 0.5
+		var end_direction := -1.0 if end == 0 else 1.0
+		var along := end_direction * length * 0.5
 		var shared := adjacent[end] != null
 		# The bay with the lower along-coordinate owns the shared marks.
 		if shared and end == 0: continue
@@ -48,7 +48,7 @@ static func segments(city: Node3D, bay: Node3D, vertical: bool, width: float, le
 			if shared:
 				result.append([corner - Vector2(0, along_arm), corner + Vector2(0, along_arm)])
 			else:
-				result.append([corner, corner - Vector2(0, sign * along_arm)])
+				result.append([corner, corner - Vector2(0, end_direction * along_arm)])
 	return result
 
 static func emit(city: Node3D, bay: Node3D, vertical: bool, surface: SurfaceTool, width: float, length: float) -> void:
